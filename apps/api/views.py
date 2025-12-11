@@ -111,14 +111,28 @@ class ClientViewSet(viewsets.ModelViewSet):
         })
 
 
+
 class VehicleViewSet(viewsets.ModelViewSet):
     queryset = Vehicle.objects.all()
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated]
 
-    # -----------------------------
+    # ============================================================
     # 1) АВТОПОИСК ПО НОМЕРУ
-    # -----------------------------
+    # ============================================================
+    @extend_schema(
+        summary="Автопошук авто за номером",
+        parameters=[
+            OpenApiParameter(
+                name="plate_number",
+                type=str,
+                required=True,
+                location=OpenApiParameter.QUERY,
+                description="Номер автомобіля (повний або частковий)"
+            )
+        ],
+        responses=VehicleSerializer(many=True),
+    )
     @action(detail=False, methods=["GET"])
     def auto_find_by_number(self, request):
         number = request.query_params.get('plate_number')
@@ -127,17 +141,27 @@ class VehicleViewSet(viewsets.ModelViewSet):
 
         vehicles = Vehicle.objects.filter(plate_number__icontains=number)
 
-        if not vehicles.exists():
-            return Response({"results": []}, status=200)
-
         return Response({
             "count": vehicles.count(),
             "results": VehicleSerializer(vehicles, many=True).data
         })
 
-    # -----------------------------
+    # ============================================================
     # 2) АВТОПОИСК ПО БРЕНДУ
-    # -----------------------------
+    # ============================================================
+    @extend_schema(
+        summary="Автопошук авто за брендом",
+        parameters=[
+            OpenApiParameter(
+                name="brand",
+                type=str,
+                required=True,
+                location=OpenApiParameter.QUERY,
+                description="Бренд авто"
+            )
+        ],
+        responses=VehicleSerializer(many=True),
+    )
     @action(detail=False, methods=["GET"])
     def auto_find_by_brand(self, request):
         brand = request.query_params.get('brand')
@@ -151,9 +175,22 @@ class VehicleViewSet(viewsets.ModelViewSet):
             "results": VehicleSerializer(vehicles, many=True).data
         })
 
-    # -----------------------------
+    # ============================================================
     # 3) АВТОПОИСК ПО МОДЕЛИ
-    # -----------------------------
+    # ============================================================
+    @extend_schema(
+        summary="Автопошук авто за моделлю",
+        parameters=[
+            OpenApiParameter(
+                name="model",
+                type=str,
+                required=True,
+                location=OpenApiParameter.QUERY,
+                description="Модель авто"
+            )
+        ],
+        responses=VehicleSerializer(many=True),
+    )
     @action(detail=False, methods=["GET"])
     def auto_find_by_model(self, request):
         model = request.query_params.get('model')
@@ -167,26 +204,33 @@ class VehicleViewSet(viewsets.ModelViewSet):
             "results": VehicleSerializer(vehicles, many=True).data
         })
 
-
-    # -----------------------------
-    # ПЕРЕОПРЕДЕЛЕННЫЙ create()
-    # -----------------------------
+    # ============================================================
+    # 4) ПЕРЕОПРЕДЕЛЕННЫЙ create()
+    # ============================================================
+    @extend_schema(
+        summary="Створення авто (з автоперевіркою існування)",
+        description=(
+            "Якщо авто з таким номером вже існує — повертається існуючий запис.\n"
+            "Якщо авто не існує — необхідно вказати brand та model."
+        ),
+        request=VehicleSerializer,
+        responses=VehicleSerializer,
+    )
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
 
-        # ---- ЛОГИКА ПРОВЕРКИ ----
         plate = data.get("plate_number")
         brand = data.get("brand")
         model = data.get("model")
 
         existing_qs = Vehicle.objects.filter(plate_number__iexact=plate)
 
-        # 1) Если нашли существующую машину → возвращаем её (чтобы не создавать дубликаты)
+        # --- если авто с этим номером уже есть, возвращаем его
         if existing_qs.exists():
             obj = existing_qs.first()
             return Response(VehicleSerializer(obj).data, status=200)
 
-        # 2) Если не нашли → создаём, но проверяем обязательные поля
+        # --- если авто не найдено, но не заполнены brand/model → ошибка
         if not brand or not model:
             return Response(
                 {"error": "Для створення нового авто необхідно вказати brand та model"},
@@ -205,7 +249,91 @@ class ServiceViewSet(viewsets.ModelViewSet):
 class JournalRecordViewSet(viewsets.ModelViewSet):
     queryset = JournalRecord.objects.all()
     serializer_class = JournalRecordSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+
+        name = data.get("client_name")
+        phone = data.get("phone")
+        plate_number = data.get("plate_number")
+
+        client = None
+        vehicle = None
+
+        # ---------------------------
+        # 1. Автопоиск клиента
+        # ---------------------------
+        if name or phone:
+            qs = Client.objects.all()
+            if name:
+                qs = qs.filter(name__icontains=name)
+            if phone:
+                qs = qs.filter(phone__icontains=phone)
+
+            if qs.count() == 1:
+                client = qs.first()
+                data["client"] = client.id
+                if not phone:
+                    data["phone"] = client.phone
+
+        # ---------------------------
+        # 2. Автопоиск машины
+        # ---------------------------
+        if plate_number:
+            vqs = Vehicle.objects.filter(plate_number__icontains=plate_number)
+
+            if vqs.count() == 1:
+                vehicle = vqs.first()
+                data["vehicle"] = vehicle.id
+
+                # если не указан клиент → подтягиваем его
+                if not client and vehicle.client:
+                    client = vehicle.client
+                    data["client"] = client.id
+                    if not data.get("phone"):
+                        data["phone"] = client.phone
+
+        # ---------------------------
+        # 3. Создание нового клиента
+        # ---------------------------
+        if not client and (name or phone):
+            if not name or not phone:
+                return Response(
+                    {"error": "Для створення нового клієнта потрібно і name, і phone"},
+                    status=400
+                )
+            client = Client.objects.create(name=name, phone=phone)
+            data["client"] = client.id
+
+        # ---------------------------
+        # 4. Создание новой машины
+        # ---------------------------
+        brand = data.get("brand")
+        model = data.get("model")
+
+        if not vehicle and plate_number:
+            if not brand or not model:
+                return Response(
+                    {"error": "Для створення нового авто потрібно brand і model"},
+                    status=400
+                )
+            vehicle = Vehicle.objects.create(
+                plate_number=plate_number,
+                brand=brand,
+                model=model,
+                client=client
+            )
+            data["vehicle"] = vehicle.id
+
+        # ---------------------------
+        # 5. Финальное создание записи журнала
+        # ---------------------------
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response(serializer.data, status=201)
 
 
 class UserCreateViewSet(viewsets.ModelViewSet):
