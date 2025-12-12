@@ -9,7 +9,7 @@ router = DefaultRouter()
 router.register('clients', ClientViewSet)
 router.register('vehicles', VehicleViewSet)
 router.register('services', ServiceViewSet)
-router.register('journal', JournalRecordViewSet)
+router.register('journals', JournalRecordViewSet)
 router.register('users', UserCreateViewSet)
 
 urlpatterns = router.urls

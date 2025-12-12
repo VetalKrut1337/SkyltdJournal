@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Машини{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Машини</h2>
+
+<div class="row mb-3">
+
+    <div class="col-md-4">
+        <input id="searchInput" type="text" class="form-control" placeholder="Пошук по номеру, бренду або моделі...">
+    </div>
+
+    <div class="col-md-4">
+        <select id="sortSelect" class="form-select">
+            <option value="">Сортувати...</option>
+            <option value="plate">Номер (A→Z)</option>
+            <option value="-plate">Номер (Z→A)</option>
+            <option value="brand">Бренд (A→Z)</option>
+            <option value="-brand">Бренд (Z→A)</option>
+        </select>
+    </div>
+
+    <div class="col-md-4 text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createVehicleModal">
+            Створити машину
+        </button>
+    </div>
+
+</div>
+
+
+<table class="table table-bordered table-striped" id="vehiclesTable">
+    <thead>
+        <tr>
+            <th>Номер</th>
+            <th>Бренд</th>
+            <th>Модель</th>
+            <th>Власник</th>
+        </tr>
+    </thead>
+    <tbody id="vehiclesBody">
+        {% for v in vehicles %}
+        <tr>
+            <td>{{ v.plate_number }}</td>
+            <td>{{ v.brand }}</td>
+            <td>{{ v.model }}</td>
+            <td>
+                {% if v.client %}
+                    {{ v.client.name }} ({{ v.client.phone }})
+                {% else %}
+                    <span class="badge bg-secondary">немає</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% include "vehicles/_create_vehicle_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+document.getElementById("searchInput").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+
+    document.querySelectorAll("#vehiclesBody tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(value) ? "" : "none";
+    });
+});
+
+document.getElementById("sortSelect").addEventListener("change", function() {
+    const field = this.value;
+    let rows = [...document.querySelectorAll("#vehiclesBody tr")];
+
+    function key(row, index) {
+        return row.children[index].innerText.toLowerCase();
+    }
+
+    if (field === "plate") {
+        rows.sort((a, b) => key(a, 0).localeCompare(key(b, 0)));
+    }
+    if (field === "-plate") {
+        rows.sort((a, b) => key(b, 0).localeCompare(key(a, 0)));
+    }
+    if (field === "brand") {
+        rows.sort((a, b) => key(a, 1).localeCompare(key(b, 1)));
+    }
+    if (field === "-brand") {
+        rows.sort((a, b) => key(b, 1).localeCompare(key(a, 1)));
+    }
+
+    const body = document.getElementById("vehiclesBody");
+    body.innerHTML = "";
+    rows.forEach(r => body.appendChild(r));
+});
+</script>
+{% endblock %}

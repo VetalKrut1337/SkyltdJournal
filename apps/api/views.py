@@ -251,6 +251,41 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
     serializer_class = JournalRecordSerializer
     permission_classes = [IsAuthenticated]
 
+    # ------------------------------------
+    # ФИЛЬТРАЦИЯ ДЛЯ /journal/?department=
+    # ------------------------------------
+    def get_queryset(self):
+        qs = super().get_queryset()
+        department = self.request.query_params.get("department")
+
+        if department in ["sales", "service"]:
+            qs = qs.filter(department=department)
+
+        return qs.order_by("-date")
+
+    # ---------------------------------------------------
+    # SWAGGER: добавить department в список параметров
+    # ---------------------------------------------------
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="department",
+                type=str,
+                description="Фільтрація по відділу: sales або service",
+                required=False
+            )
+        ]
+    )
+    def list(self, *args, **kwargs):
+        return super().list(*args, **kwargs)
+
+    # ---------------------------------------------------
+    # ПЕРЕОПРЕДЕЛЁННЫЙ create() С ТВОЕЙ ЛОГИКОЙ
+    # ---------------------------------------------------
+    @extend_schema(
+        summary="Створення запису журналу з автопошуком",
+        description="Автоматичний пошук/створення клієнта та авто при створенні запису."
+    )
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
 
@@ -287,7 +322,7 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
                 vehicle = vqs.first()
                 data["vehicle"] = vehicle.id
 
-                # если не указан клиент → подтягиваем его
+                # если не указан клиент → берём из машины
                 if not client and vehicle.client:
                     client = vehicle.client
                     data["client"] = client.id
@@ -327,14 +362,13 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
             data["vehicle"] = vehicle.id
 
         # ---------------------------
-        # 5. Финальное создание записи журнала
+        # 5. Создание записи журнала
         # ---------------------------
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
 
         return Response(serializer.data, status=201)
-
 
 class UserCreateViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

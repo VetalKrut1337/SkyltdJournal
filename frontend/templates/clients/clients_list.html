@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Клієнти{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Клієнти</h2>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <input id="searchInput" type="text" class="form-control" placeholder="Пошук по імені або телефону...">
+    </div>
+
+    <div class="col-md-4">
+        <select id="sortSelect" class="form-select">
+            <option value="">Сортувати...</option>
+            <option value="name">Ім'я (A→Z)</option>
+            <option value="-name">Ім'я (Z→A)</option>
+            <option value="phone">Телефон (↑)</option>
+            <option value="-phone">Телефон (↓)</option>
+        </select>
+    </div>
+
+    <div class="col-md-4 text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createClientModal">
+            Створити клієнта
+        </button>
+    </div>
+</div>
+
+
+<table class="table table-bordered table-striped" id="clientsTable">
+    <thead>
+        <tr>
+            <th>Ім'я</th>
+            <th>Телефон</th>
+            <th>Машини</th>
+        </tr>
+    </thead>
+    <tbody id="clientsTableBody">
+        {% for client in clients %}
+        <tr>
+            <td>{{ client.name }}</td>
+            <td>{{ client.phone }}</td>
+            <td>
+                {% if client.vehicles.all %}
+                    {% for v in client.vehicles.all %}
+                        <span class="badge bg-secondary">{{ v.plate_number }} ({{ v.brand }} {{ v.model }})</span>
+                    {% endfor %}
+                {% else %}
+                    <i>немає</i>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% include "clients/_create_client_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+document.getElementById("searchInput").addEventListener("keyup", function() {
+    let value = this.value.toLowerCase();
+    document.querySelectorAll("#clientsTableBody tr").forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(value) ? "" : "none";
+    });
+});
+
+document.getElementById("sortSelect").addEventListener("change", function() {
+    const field = this.value;
+    const rows = [...document.querySelectorAll("#clientsTableBody tr")];
+
+    rows.sort((a, b) => {
+        const aText = a.children[0].innerText.toLowerCase();
+        const bText = b.children[0].innerText.toLowerCase();
+        return aText.localeCompare(bText);
+    });
+
+    if (field.startsWith("-")) rows.reverse();
+
+    const body = document.getElementById("clientsTableBody");
+    body.innerHTML = "";
+    rows.forEach(r => body.appendChild(r));
+});
+</script>
+{% endblock %}

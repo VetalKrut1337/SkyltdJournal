@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <h2>Журнал</h2>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" id="journalTabs">
+        <li class="nav-item">
+            <button class="nav-link active" data-type="sales" id="tab-sales">
+                Отдел продаж
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-type="service" id="tab-service">
+                Отдел сервиса
+            </button>
+        </li>
+    </ul>
+
+    <!-- Add button -->
+    <div class="mt-3">
+        <button class="btn btn-primary" id="openCreateModal">Добавить запись</button>
+    </div>
+
+    <!-- LISTS -->
+    <div id="journalContent" class="mt-4">
+        <p>Загрузка...</p>
+    </div>
+</div>
+
+<!-- MODAL WINDOW -->
+<div class="modal fade" id="journalModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Добавить запись</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <form id="journalForm">
+            <input type="hidden" id="department" name="department">
+
+            <div class="mb-3">
+                <label>Дата и время</label>
+                <input type="datetime-local" class="form-control" id="datetime" required>
+            </div>
+
+            <!-- CLIENT AUTOCOMPLETE -->
+            <div class="mb-3">
+                <label>Клиент</label>
+                <input class="form-control" id="client_input" placeholder="ФИО или телефон">
+                <div id="client_search_results" class="list-group mt-1"></div>
+            </div>
+
+            <!-- VEHICLE (only for service department) -->
+            <div class="mb-3" id="vehicle_block" style="display:none;">
+                <label>Автомобиль</label>
+                <input class="form-control" id="vehicle_input" placeholder="Номер авто">
+                <div id="vehicle_search_results" class="list-group mt-1"></div>
+            </div>
+
+            <div class="mb-3">
+                <label>Комментарий</label>
+                <textarea class="form-control" id="comment"></textarea>
+            </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" id="saveJournal">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'js/journal.js' %}"></script>
+
+{% endblock %}

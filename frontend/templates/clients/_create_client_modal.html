@@ -1,0 +1,71 @@
+<div class="modal fade" id="createClientModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+      <form method="POST" action="{% url 'client_create' %}">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h5 class="modal-title">Створити клієнта</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+
+          <!-- CLIENT -->
+          <div class="mb-3">
+            <label class="form-label">Ім'я</label>
+            <input type="text" name="name" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Телефон</label>
+            <input type="text" name="phone" class="form-control" required>
+          </div>
+
+          <hr>
+
+          <h5>Прив’язати машину</h5>
+
+          <!-- CHOOSE EXISTING -->
+          <div class="mb-3">
+            <label class="form-label">Вибрати існуючу машину (без власника)</label>
+            <select name="existing_vehicle" class="form-select">
+              <option value="">-- Не вибрано --</option>
+              {% for v in free_vehicles %}
+                <option value="{{ v.id }}">{{ v.plate_number }} ({{ v.brand }} {{ v.model }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <hr>
+          <h6>АБО створити нову машину</h6>
+
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Номер</label>
+              <input type="text" class="form-control" name="plate_number">
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Бренд</label>
+              <input type="text" class="form-control" name="brand">
+            </div>
+
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Модель</label>
+              <input type="text" class="form-control" name="model">
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
+          <button class="btn btn-primary" type="submit">Створити</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>

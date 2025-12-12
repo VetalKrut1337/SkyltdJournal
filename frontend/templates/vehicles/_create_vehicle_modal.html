@@ -1,0 +1,45 @@
+<div class="modal fade" id="createVehicleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <form method="POST" action="{% url 'vehicle_create' %}">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h5 class="modal-title">Створити машину</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+
+          <div class="mb-3">
+            <label class="form-label">Номер</label>
+            <input type="text" name="plate_number" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Бренд</label>
+            <input type="text" name="brand" class="form-control" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Модель</label>
+            <input type="text" name="model" class="form-control" required>
+          </div>
+
+          <p class="text-muted small">
+              Власника тут не вибираємо — він може бути доданий пізніше.
+          </p>
+
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
+          <button class="btn btn-primary" type="submit">Створити</button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+</div>
