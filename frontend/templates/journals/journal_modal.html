@@ -1,0 +1,35 @@
+<div class="modal fade" id="journalModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" id="journalForm" action="{% url 'journal_create' %}">
+      {% csrf_token %}
+      <input type="hidden" name="department" id="departmentInput" value="{{ tab }}">
+
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Новая запись</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          {{ form.client }}
+          <br>
+          {{ form.phone }}
+          <br>
+          {% if tab == 'service' %}
+              {{ form.vehicle }}
+              <br>
+              {{ form.service }}
+              <br>
+          {% endif %}
+          {{ form.comment }}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button type="submit" class="btn btn-primary">Создать</button>
+        </div>
+
+      </div>
+    </form>
+  </div>
+</div>
