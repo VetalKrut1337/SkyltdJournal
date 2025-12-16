@@ -144,7 +144,7 @@ class ClientViewSet(viewsets.ModelViewSet):
 
 
 class VehicleViewSet(viewsets.ModelViewSet):
-    queryset = Vehicle.objects.all()
+    queryset = Vehicle.objects.all().select_related('client')
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated]
 
@@ -334,19 +334,36 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
         description="Автоматичний пошук/створення клієнта та авто при створенні запису."
     )
     def create(self, request, *args, **kwargs):
+        # Берём данные из запиту і акуратно працюємо з допоміжними полями
         data = request.data.copy()
-
-        name = data.get("client_name")
-        phone = data.get("phone")
-        plate_number = data.get("plate_number")
 
         client = None
         vehicle = None
 
+        # Явно переданий клієнт / авто з фронтенду
+        client_id = data.get("client_id")
+        vehicle_id = data.get("vehicle_id")
+
+        name = data.pop("client_name", None)
+        phone = data.get("phone")
+        plate_number = data.pop("plate_number", None)
+
         # ---------------------------
-        # 1. Автопоиск клиента
+        # 1. Якщо client_id переданий — використовуємо його
         # ---------------------------
-        if name or phone:
+        if client_id:
+            try:
+                client = Client.objects.get(id=client_id)
+                data["client_id"] = client.id
+                if not phone and client.phone:
+                    data["phone"] = client.phone
+            except Client.DoesNotExist:
+                client = None
+
+        # ---------------------------
+        # 2. Автопошук клієнта (якщо client_id не знайшли)
+        # ---------------------------
+        if not client and (name or phone):
             qs = Client.objects.all()
             if name:
                 qs = qs.filter(name__icontains=name)
@@ -355,29 +372,46 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
 
             if qs.count() == 1:
                 client = qs.first()
-                data["client"] = client.id
-                if not phone:
+                data["client_id"] = client.id
+                if not phone and client.phone:
                     data["phone"] = client.phone
 
         # ---------------------------
-        # 2. Автопоиск машины
+        # 3. Якщо vehicle_id переданий — використовуємо його
         # ---------------------------
-        if plate_number:
+        if vehicle_id:
+            try:
+                vehicle = Vehicle.objects.select_related("client").get(id=vehicle_id)
+                data["vehicle_id"] = vehicle.id
+
+                # якщо клієнт не вказаний, беремо з авто
+                if not client and vehicle.client:
+                    client = vehicle.client
+                    data["client_id"] = client.id
+                    if not data.get("phone") and client.phone:
+                        data["phone"] = client.phone
+            except Vehicle.DoesNotExist:
+                vehicle = None
+
+        # ---------------------------
+        # 4. Автопошук машини по номеру (якщо vehicle не знайшли)
+        # ---------------------------
+        if not vehicle and plate_number:
             vqs = Vehicle.objects.filter(plate_number__icontains=plate_number)
 
             if vqs.count() == 1:
                 vehicle = vqs.first()
-                data["vehicle"] = vehicle.id
+                data["vehicle_id"] = vehicle.id
 
                 # если не указан клиент → берём из машины
                 if not client and vehicle.client:
                     client = vehicle.client
-                    data["client"] = client.id
-                    if not data.get("phone"):
+                    data["client_id"] = client.id
+                    if not data.get("phone") and client.phone:
                         data["phone"] = client.phone
 
         # ---------------------------
-        # 3. Создание нового клиента
+        # 5. Создание нового клиента (якщо так і не знайшли)
         # ---------------------------
         if not client and (name or phone):
             if not name or not phone:
@@ -386,13 +420,13 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
                     status=400
                 )
             client = Client.objects.create(name=name, phone=phone)
-            data["client"] = client.id
+            data["client_id"] = client.id
 
         # ---------------------------
-        # 4. Создание новой машины
+        # 6. Создание новой машины (якщо так і не знайшли)
         # ---------------------------
-        brand = data.get("brand")
-        model = data.get("model")
+        brand = data.pop("brand", None)
+        model = data.pop("model", None)
 
         if not vehicle and plate_number:
             if not brand or not model:
@@ -406,7 +440,7 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
                 model=model,
                 client=client
             )
-            data["vehicle"] = vehicle.id
+            data["vehicle_id"] = vehicle.id
 
         # ---------------------------
         # 5. Создание записи журнала
@@ -416,6 +450,51 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
         self.perform_create(serializer)
 
         return Response(serializer.data, status=201)
+
+    # ---------------------------------------------------
+    # ПЕРЕОПРЕДЕЛЁННЫЙ update() ДЛЯ ДОПОЛНЕНИЯ КОММЕНТАРИЯ
+    # ---------------------------------------------------
+    @extend_schema(
+        summary="Доповнення коментаря до запису журналу",
+        description="Додає новий коментар до існуючого з датою та часом. Старий коментар не можна редагувати або видаляти."
+    )
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        data = request.data.copy()
+
+        # Разрешаем обновлять только комментарий
+        new_comment = data.get("comment", "").strip()
+
+        if not new_comment:
+            return Response(
+                {"error": "Коментар не може бути порожнім"},
+                status=400
+            )
+
+        # Форматируем дату и время для дополнения
+        from django.utils import timezone
+        from datetime import datetime
+        now = timezone.now()
+        date_str = now.strftime("%d.%m.%Y %H:%M")
+
+        # Если комментарий уже существует, добавляем новое дополнение
+        if instance.comment:
+            # Разделитель для истории дополнений
+            separator = "\n\n---\n\n"
+            updated_comment = f"{instance.comment}{separator}<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
+        else:
+            updated_comment = f"<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
+
+        # Обновляем только комментарий
+        instance.comment = updated_comment
+        instance.save(update_fields=['comment'])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """PATCH запросы тоже обрабатываем через update"""
+        return self.update(request, *args, **kwargs)
 
 class UserCreateViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
