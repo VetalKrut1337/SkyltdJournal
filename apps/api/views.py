@@ -5,6 +5,10 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+# Форматируем дату и время для дополнения (локальное время)
+from django.utils import timezone
+import pytz
+
 from apps.models import Client, Vehicle, Service, JournalRecord
 from apps.accounts.models import User
 from .serializers import (
@@ -443,13 +447,34 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
             data["vehicle_id"] = vehicle.id
 
         # ---------------------------
-        # 5. Создание записи журнала
+        # 7. Обработка множественных сервисов
+        # ---------------------------
+        service_ids = data.pop("service_ids", [])
+        if isinstance(service_ids, str):
+            import json
+            try:
+                service_ids = json.loads(service_ids)
+            except:
+                service_ids = [service_ids] if service_ids else []
+        elif not isinstance(service_ids, list):
+            service_ids = []
+        
+        # Преобразуем в числа и фильтруем валидные
+        service_ids = [int(sid) for sid in service_ids if sid]
+
+        # ---------------------------
+        # 8. Создание записи журнала
         # ---------------------------
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        journal_record = serializer.save()
 
-        return Response(serializer.data, status=201)
+        # Привязываем множественные сервисы
+        if service_ids:
+            services = Service.objects.filter(id__in=service_ids, is_active=True)
+            journal_record.services.set(services)
+
+        return Response(self.get_serializer(journal_record).data, status=201)
 
     # ---------------------------------------------------
     # ПЕРЕОПРЕДЕЛЁННЫЙ update() ДЛЯ ДОПОЛНЕНИЯ КОММЕНТАРИЯ
@@ -471,17 +496,21 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
                 status=400
             )
 
-        # Форматируем дату и время для дополнения
-        from django.utils import timezone
-        from datetime import datetime
+        
+        # Получаем локальное время (Europe/Kiev)
+        local_tz = pytz.timezone('Europe/Kiev')
         now = timezone.now()
-        date_str = now.strftime("%d.%m.%Y %H:%M")
+        if timezone.is_aware(now):
+            local_now = now.astimezone(local_tz)
+        else:
+            local_now = local_tz.localize(now)
+        
+        date_str = local_now.strftime("%d.%m.%Y %H:%M")
 
         # Если комментарий уже существует, добавляем новое дополнение
         if instance.comment:
-            # Разделитель для истории дополнений
-            separator = "\n\n---\n\n"
-            updated_comment = f"{instance.comment}{separator}<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
+            # Без разделителя, просто новая строка
+            updated_comment = f"{instance.comment}\n\n<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
         else:
             updated_comment = f"<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
 

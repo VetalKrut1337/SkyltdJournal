@@ -91,6 +91,11 @@ class JournalRecord(models.Model):
         blank=True,
         related_name="journal_records"
     )
+    services = models.ManyToManyField(
+        Service,
+        blank=True,
+        related_name="journal_records_many"
+    )
 
     comment = models.TextField(blank=True, null=True)
 

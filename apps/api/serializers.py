@@ -42,10 +42,16 @@ class JournalRecordSerializer(serializers.ModelSerializer):
     client = ClientBasicSerializer(read_only=True)
     vehicle = VehicleBasicSerializer(read_only=True)
     service = ServiceSerializer(read_only=True)
+    services = ServiceSerializer(many=True, read_only=True)
 
     client_id = serializers.IntegerField(write_only=True, required=False)
     vehicle_id = serializers.IntegerField(write_only=True, required=False)
     service_id = serializers.IntegerField(write_only=True, required=False)
+    service_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False
+    )
 
     class Meta:
         model = JournalRecord
@@ -57,12 +63,14 @@ class JournalRecordSerializer(serializers.ModelSerializer):
             'phone',
             'vehicle',
             'service',
+            'services',
             'comment',
             'client_id',
             'vehicle_id',
             'service_id',
+            'service_ids',
         ]
-        read_only_fields = ['client', 'vehicle', 'service']
+        read_only_fields = ['client', 'vehicle', 'service', 'services']
 
 
 class UserSerializer(serializers.ModelSerializer):
