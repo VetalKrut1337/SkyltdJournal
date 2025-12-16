@@ -2,25 +2,34 @@ from rest_framework import serializers
 from apps.models import Client, Vehicle, Service, JournalRecord
 from apps.accounts.models import User
 
-class ClientSerializer(serializers.ModelSerializer):
+# Используем базовый сериализатор для избежания циклической зависимости
+class VehicleBasicSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Client
-        fields = ['id', 'name', 'phone']
+        model = Vehicle
+        fields = ['id', 'brand', 'model', 'plate_number']
 
 
 class VehicleSerializer(serializers.ModelSerializer):
-    client = ClientSerializer(read_only=True)
     client_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = Vehicle
         fields = ['id', 'brand', 'model', 'plate_number', 'client', 'client_id']
+        read_only_fields = ['client']
+
+
+class ClientSerializer(serializers.ModelSerializer):
+    vehicles = VehicleBasicSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Client
+        fields = ['id', 'name', 'phone', 'vehicles']
 
 
 class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Service
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'is_active']
 
 
 class JournalRecordSerializer(serializers.ModelSerializer):

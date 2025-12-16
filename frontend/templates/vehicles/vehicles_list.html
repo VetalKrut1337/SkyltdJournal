@@ -6,7 +6,6 @@
 <h2 class="mb-3">Машини</h2>
 
 <div class="row mb-3">
-
     <div class="col-md-4">
         <input id="searchInput" type="text" class="form-control" placeholder="Пошук по номеру, бренду або моделі...">
     </div>
@@ -14,23 +13,32 @@
     <div class="col-md-4">
         <select id="sortSelect" class="form-select">
             <option value="">Сортувати...</option>
-            <option value="plate">Номер (A→Z)</option>
-            <option value="-plate">Номер (Z→A)</option>
+            <option value="plate_number">Номер (A→Z)</option>
+            <option value="-plate_number">Номер (Z→A)</option>
             <option value="brand">Бренд (A→Z)</option>
             <option value="-brand">Бренд (Z→A)</option>
+            <option value="model">Модель (A→Z)</option>
+            <option value="-model">Модель (Z→A)</option>
         </select>
     </div>
 
     <div class="col-md-4 text-end">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createVehicleModal">
-            Створити машину
+        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#createVehicleModal">
+            Додати машину
+        </button>
+        <button class="btn btn-primary" onclick="loadVehicles()">
+            Оновити список
         </button>
     </div>
-
 </div>
 
+<div id="loadingSpinner" class="text-center py-5" style="display: none;">
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Завантаження...</span>
+    </div>
+</div>
 
-<table class="table table-bordered table-striped" id="vehiclesTable">
+<table class="table table-bordered table-striped" id="vehiclesTable" style="display: none;">
     <thead>
         <tr>
             <th>Номер</th>
@@ -40,62 +48,384 @@
         </tr>
     </thead>
     <tbody id="vehiclesBody">
-        {% for v in vehicles %}
-        <tr>
-            <td>{{ v.plate_number }}</td>
-            <td>{{ v.brand }}</td>
-            <td>{{ v.model }}</td>
-            <td>
-                {% if v.client %}
-                    {{ v.client.name }} ({{ v.client.phone }})
-                {% else %}
-                    <span class="badge bg-secondary">немає</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
+        <!-- Дані будуть завантажені через API -->
     </tbody>
 </table>
+
+<div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
 
 {% include "vehicles/_create_vehicle_modal.html" %}
 
 {% endblock %}
 
-
 {% block scripts %}
 <script>
-document.getElementById("searchInput").addEventListener("keyup", function() {
-    let value = this.value.toLowerCase();
+let allVehicles = [];
 
-    document.querySelectorAll("#vehiclesBody tr").forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(value) ? "" : "none";
-    });
-});
+// Функция для получения CSRF токена из cookie
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 
-document.getElementById("sortSelect").addEventListener("change", function() {
-    const field = this.value;
-    let rows = [...document.querySelectorAll("#vehiclesBody tr")];
+function loadVehicles() {
+    const spinner = document.getElementById("loadingSpinner");
+    const table = document.getElementById("vehiclesTable");
+    const errorMsg = document.getElementById("errorMessage");
+    const body = document.getElementById("vehiclesBody");
 
-    function key(row, index) {
-        return row.children[index].innerText.toLowerCase();
-    }
+    // Показуємо спіннер, ховаємо таблицю та повідомлення про помилку
+    spinner.style.display = "block";
+    table.style.display = "none";
+    errorMsg.style.display = "none";
 
-    if (field === "plate") {
-        rows.sort((a, b) => key(a, 0).localeCompare(key(b, 0)));
-    }
-    if (field === "-plate") {
-        rows.sort((a, b) => key(b, 0).localeCompare(key(a, 0)));
-    }
-    if (field === "brand") {
-        rows.sort((a, b) => key(a, 1).localeCompare(key(b, 1)));
-    }
-    if (field === "-brand") {
-        rows.sort((a, b) => key(b, 1).localeCompare(key(a, 1)));
-    }
+    fetch("/api/vehicles/", {
+        credentials: 'include'
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            allVehicles = data.results || [];
+            renderVehicles(allVehicles);
+            
+            spinner.style.display = "none";
+            table.style.display = "table";
+        })
+        .catch(error => {
+            console.error("Помилка завантаження машин:", error);
+            errorMsg.textContent = `Помилка завантаження даних: ${error.message}`;
+            errorMsg.style.display = "block";
+            spinner.style.display = "none";
+        });
+}
 
+function renderVehicles(vehicles) {
     const body = document.getElementById("vehiclesBody");
     body.innerHTML = "";
-    rows.forEach(r => body.appendChild(r));
+
+    if (vehicles.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" class="text-center">Машини не знайдено</td></tr>';
+        return;
+    }
+
+    vehicles.forEach(vehicle => {
+        const row = document.createElement("tr");
+        const ownerInfo = vehicle.client 
+            ? `${vehicle.client.name} (${vehicle.client.phone})`
+            : '<span class="badge bg-secondary">немає</span>';
+        
+        row.innerHTML = `
+            <td>${vehicle.plate_number || ''}</td>
+            <td>${vehicle.brand || ''}</td>
+            <td>${vehicle.model || ''}</td>
+            <td>${ownerInfo}</td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function createVehicle() {
+    const plateInput = document.getElementById("vehiclePlateInput");
+    const brandInput = document.getElementById("vehicleBrandInput");
+    const modelInput = document.getElementById("vehicleModelInput");
+    const clientIdInput = document.getElementById("vehicleClientId");
+    const errorDiv = document.getElementById("vehicleFormError");
+    const saveBtn = document.getElementById("saveVehicleBtn");
+    
+    const plate = plateInput.value.trim();
+    const brand = brandInput.value.trim();
+    const model = modelInput.value.trim();
+    const clientId = clientIdInput.value ? parseInt(clientIdInput.value) : null;
+
+    // Очищаем предыдущие ошибки
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+    plateInput.classList.remove("is-invalid");
+    brandInput.classList.remove("is-invalid");
+    modelInput.classList.remove("is-invalid");
+
+    // Валидация на клиенте
+    if (!plate) {
+        plateInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть номер машини";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    if (!brand) {
+        brandInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть бренд";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    if (!model) {
+        modelInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть модель";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Проверка на уникальность (на клиенте) - комбинация номер+бренд+модель
+    const existingVehicle = allVehicles.find(v => 
+        v.plate_number && v.brand && v.model &&
+        v.plate_number.toLowerCase() === plate.toLowerCase() &&
+        v.brand.toLowerCase() === brand.toLowerCase() &&
+        v.model.toLowerCase() === model.toLowerCase()
+    );
+    
+    if (existingVehicle) {
+        errorDiv.textContent = "Машина з такими номером, брендом та моделлю вже існує";
+        errorDiv.style.display = "block";
+        plateInput.classList.add("is-invalid");
+        brandInput.classList.add("is-invalid");
+        modelInput.classList.add("is-invalid");
+        return;
+    }
+
+    // Блокируем кнопку
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Збереження...";
+
+    // Получаем CSRF токен
+    const csrftoken = getCookie('csrftoken');
+
+    // Отправка через API
+    fetch("/api/vehicles/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+            plate_number: plate,
+            brand: brand,
+            model: model,
+            ...(clientId && { client_id: clientId })
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Успешно создан
+        const modal = bootstrap.Modal.getInstance(document.getElementById("createVehicleModal"));
+        modal.hide();
+        
+        // Очищаем форму
+        plateInput.value = "";
+        brandInput.value = "";
+        modelInput.value = "";
+        document.getElementById("vehicleClientInput").value = "";
+        clientIdInput.value = "";
+        plateInput.classList.remove("is-invalid");
+        brandInput.classList.remove("is-invalid");
+        modelInput.classList.remove("is-invalid");
+        errorDiv.style.display = "none";
+        
+        // Перезагружаем список
+        loadVehicles();
+    })
+    .catch(error => {
+        console.error("Помилка створення машини:", error);
+        
+        // Показываем ошибку
+        let errorMessage = "Помилка при створенні машини";
+        
+        if (error.error) {
+            errorMessage = error.error;
+        } else if (error.detail) {
+            errorMessage = error.detail;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        // Проверяем на уникальность (ошибка от сервера)
+        if (errorMessage.toLowerCase().includes("вже існує") || errorMessage.toLowerCase().includes("already exists")) {
+            errorDiv.textContent = errorMessage;
+            plateInput.classList.add("is-invalid");
+            brandInput.classList.add("is-invalid");
+            modelInput.classList.add("is-invalid");
+        } else {
+            errorDiv.textContent = errorMessage;
+        }
+        
+        errorDiv.style.display = "block";
+    })
+    .finally(() => {
+        // Разблокируем кнопку
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Створити";
+    });
+}
+
+// Завантаження при завантаженні сторінки
+document.addEventListener("DOMContentLoaded", () => {
+    loadVehicles();
+
+    // Пошук
+    document.getElementById("searchInput").addEventListener("keyup", function() {
+        const value = this.value.toLowerCase();
+        const filtered = allVehicles.filter(vehicle => {
+            const plate = (vehicle.plate_number || '').toLowerCase();
+            const brand = (vehicle.brand || '').toLowerCase();
+            const model = (vehicle.model || '').toLowerCase();
+            const owner = vehicle.client ? 
+                `${vehicle.client.name} ${vehicle.client.phone}`.toLowerCase() : '';
+            return plate.includes(value) || brand.includes(value) || model.includes(value) || owner.includes(value);
+        });
+        renderVehicles(filtered);
+    });
+
+    // Сортування
+    document.getElementById("sortSelect").addEventListener("change", function() {
+        const field = this.value;
+        if (!field) {
+            renderVehicles(allVehicles);
+            return;
+        }
+
+        const sorted = [...allVehicles];
+        const isDesc = field.startsWith("-");
+        const sortField = isDesc ? field.substring(1) : field;
+
+        sorted.sort((a, b) => {
+            const aVal = (a[sortField] || "").toString().toLowerCase();
+            const bVal = (b[sortField] || "").toString().toLowerCase();
+            const comparison = aVal.localeCompare(bVal);
+            return isDesc ? -comparison : comparison;
+        });
+
+        renderVehicles(sorted);
+    });
+
+    // Обработка поиска клиентов
+    let allClients = [];
+    const clientInput = document.getElementById("vehicleClientInput");
+    const clientResults = document.getElementById("vehicleClientSearchResults");
+    const clientIdInput = document.getElementById("vehicleClientId");
+
+    // Загружаем всех клиентов при открытии модального окна
+    function loadClients() {
+        fetch("/api/clients/", {
+            credentials: 'include'
+        })
+        .then(response => response.json())
+        .then(data => {
+            allClients = data.results || [];
+        })
+        .catch(error => {
+            console.error("Помилка завантаження клієнтів:", error);
+        });
+    }
+
+    // Загружаем клиентов при открытии модального окна
+    const createModal = document.getElementById("createVehicleModal");
+    if (createModal) {
+        createModal.addEventListener("show.bs.modal", function() {
+            loadClients();
+        });
+    }
+
+    if (clientInput) {
+        clientInput.addEventListener("input", function() {
+            const query = this.value.trim().toLowerCase();
+            
+            // Очищаем результаты если поле пустое
+            if (query.length < 1) {
+                clientResults.style.display = "none";
+                clientResults.innerHTML = "";
+                clientIdInput.value = "";
+                return;
+            }
+
+            // Фильтруем клиентов на клиенте (по имени и телефону)
+            const filteredClients = allClients.filter(client => {
+                const name = (client.name || "").toLowerCase();
+                const phone = (client.phone || "").toLowerCase();
+                return name.includes(query) || phone.includes(query);
+            });
+
+            clientResults.innerHTML = "";
+            
+            if (filteredClients.length === 0) {
+                const noResult = document.createElement("div");
+                noResult.className = "list-group-item text-muted";
+                noResult.textContent = "Клієнтів не знайдено";
+                clientResults.appendChild(noResult);
+            } else {
+                filteredClients.forEach(client => {
+                    const item = document.createElement("button");
+                    item.type = "button";
+                    item.className = "list-group-item list-group-item-action";
+                    item.textContent = `${client.name} (${client.phone})`;
+                    item.onclick = (e) => {
+                        e.preventDefault();
+                        clientInput.value = `${client.name} (${client.phone})`;
+                        clientIdInput.value = client.id;
+                        clientResults.style.display = "none";
+                        clientResults.innerHTML = "";
+                    };
+                    clientResults.appendChild(item);
+                });
+            }
+            
+            clientResults.style.display = "block";
+        });
+
+        // Скрываем результаты при клике вне поля
+        document.addEventListener("click", function(e) {
+            if (!clientInput.contains(e.target) && !clientResults.contains(e.target)) {
+                clientResults.style.display = "none";
+            }
+        });
+
+        // Очищаем выбранного клиента при очистке поля
+        clientInput.addEventListener("blur", function() {
+            setTimeout(() => {
+                if (!this.value.trim()) {
+                    clientIdInput.value = "";
+                }
+            }, 200);
+        });
+    }
+
+    // Обработка закрытия модального окна - очистка формы
+    const modal = document.getElementById("createVehicleModal");
+    if (modal) {
+        modal.addEventListener("hidden.bs.modal", function() {
+            document.getElementById("vehiclePlateInput").value = "";
+            document.getElementById("vehicleBrandInput").value = "";
+            document.getElementById("vehicleModelInput").value = "";
+            document.getElementById("vehicleClientInput").value = "";
+            document.getElementById("vehicleClientId").value = "";
+            document.getElementById("vehicleClientSearchResults").style.display = "none";
+            document.getElementById("vehicleClientSearchResults").innerHTML = "";
+            document.getElementById("vehiclePlateInput").classList.remove("is-invalid");
+            document.getElementById("vehicleBrandInput").classList.remove("is-invalid");
+            document.getElementById("vehicleModelInput").classList.remove("is-invalid");
+            document.getElementById("vehicleFormError").style.display = "none";
+            document.getElementById("vehicleFormError").textContent = "";
+        });
+    }
 });
 </script>
 {% endblock %}

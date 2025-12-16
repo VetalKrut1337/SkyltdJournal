@@ -14,9 +14,40 @@ from .serializers import (
 
 
 class ClientViewSet(viewsets.ModelViewSet):
-    queryset = Client.objects.all()
+    queryset = Client.objects.all().prefetch_related('vehicles')
     serializer_class = ClientSerializer
     permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        """Переопределяем create для обработки привязки машин"""
+        data = request.data.copy()
+        
+        # Получаем vehicle_ids из данных (может быть список)
+        vehicle_ids = data.pop('vehicle_ids', [])
+        if isinstance(vehicle_ids, str):
+            # Если пришла строка, пытаемся распарсить как JSON
+            import json
+            try:
+                vehicle_ids = json.loads(vehicle_ids)
+            except:
+                vehicle_ids = [vehicle_ids] if vehicle_ids else []
+        elif not isinstance(vehicle_ids, list):
+            vehicle_ids = []
+        
+        # Преобразуем в числа
+        vehicle_ids = [int(vid) for vid in vehicle_ids if vid]
+        
+        # Создаем клиента
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        client = serializer.save()
+        
+        # Привязываем машины к клиенту
+        if vehicle_ids:
+            Vehicle.objects.filter(id__in=vehicle_ids).update(client=client)
+        
+        # Возвращаем клиента с обновленными данными
+        return Response(ClientSerializer(client).data, status=201)
 
     @extend_schema(
         summary="Автопошук клієнта за ім'ям (з можливим створенням)",
@@ -116,6 +147,16 @@ class VehicleViewSet(viewsets.ModelViewSet):
     queryset = Vehicle.objects.all()
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Отримати машини без власника",
+        responses=VehicleSerializer(many=True),
+    )
+    @action(detail=False, methods=["GET"])
+    def free(self, request):
+        """Возвращает список машин без владельца"""
+        free_vehicles = Vehicle.objects.filter(client__isnull=True)
+        return Response(VehicleSerializer(free_vehicles, many=True).data)
 
     # ============================================================
     # 1) АВТОПОИСК ПО НОМЕРУ
@@ -219,21 +260,27 @@ class VehicleViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
 
-        plate = data.get("plate_number")
-        brand = data.get("brand")
-        model = data.get("model")
+        plate = data.get("plate_number", "").strip()
+        brand = data.get("brand", "").strip()
+        model = data.get("model", "").strip()
 
-        existing_qs = Vehicle.objects.filter(plate_number__iexact=plate)
-
-        # --- если авто с этим номером уже есть, возвращаем его
-        if existing_qs.exists():
-            obj = existing_qs.first()
-            return Response(VehicleSerializer(obj).data, status=200)
-
-        # --- если авто не найдено, но не заполнены brand/model → ошибка
+        # --- проверка на обязательные поля
         if not brand or not model:
             return Response(
                 {"error": "Для створення нового авто необхідно вказати brand та model"},
+                status=400
+            )
+
+        # --- валидация: проверяем, существует ли машина с такими же номером, брендом и моделью одновременно
+        existing_vehicle = Vehicle.objects.filter(
+            plate_number__iexact=plate,
+            brand__iexact=brand,
+            model__iexact=model
+        ).first()
+
+        if existing_vehicle:
+            return Response(
+                {"error": "Машина з такими номером, брендом та моделлю вже існує"},
                 status=400
             )
 

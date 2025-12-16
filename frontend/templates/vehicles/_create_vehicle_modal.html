@@ -1,45 +1,54 @@
+<!-- Модальное окно для создания машины -->
 <div class="modal fade" id="createVehicleModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Додати нову машину</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="vehicleFormError" class="alert alert-danger" style="display: none;"></div>
+                
+                <div class="mb-3">
+                    <label for="vehiclePlateInput" class="form-label">Номер</label>
+                    <input type="text" class="form-control" id="vehiclePlateInput" placeholder="Введіть номер машини" required>
+                    <div class="invalid-feedback">
+                        Будь ласка, введіть номер машини
+                    </div>
+                </div>
 
-      <form method="POST" action="{% url 'vehicle_create' %}">
-        {% csrf_token %}
+                <div class="mb-3">
+                    <label for="vehicleBrandInput" class="form-label">Бренд</label>
+                    <input type="text" class="form-control" id="vehicleBrandInput" placeholder="Введіть бренд" required>
+                    <div class="invalid-feedback">
+                        Будь ласка, введіть бренд
+                    </div>
+                </div>
 
-        <div class="modal-header">
-          <h5 class="modal-title">Створити машину</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="mb-3">
+                    <label for="vehicleModelInput" class="form-label">Модель</label>
+                    <input type="text" class="form-control" id="vehicleModelInput" placeholder="Введіть модель" required>
+                    <div class="invalid-feedback">
+                        Будь ласка, введіть модель
+                    </div>
+                </div>
+
+                <div class="mb-3" style="position: relative;">
+                    <label for="vehicleClientInput" class="form-label">Клієнт (необов'язково)</label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="vehicleClientInput" 
+                           placeholder="Пошук клієнта за ім'ям або телефоном..."
+                           autocomplete="off">
+                    <div id="vehicleClientSearchResults" class="list-group" style="position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; display: none; width: 100%; top: 100%; margin-top: 2px; border: 1px solid #ced4da; border-radius: 0.375rem;"></div>
+                    <input type="hidden" id="vehicleClientId" value="">
+                    <small class="text-muted">Можна залишити пустим, клієнта можна додати пізніше</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-primary" id="saveVehicleBtn" onclick="createVehicle()">Створити</button>
+            </div>
         </div>
-
-        <div class="modal-body">
-
-          <div class="mb-3">
-            <label class="form-label">Номер</label>
-            <input type="text" name="plate_number" class="form-control" required>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Бренд</label>
-            <input type="text" name="brand" class="form-control" required>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Модель</label>
-            <input type="text" name="model" class="form-control" required>
-          </div>
-
-          <p class="text-muted small">
-              Власника тут не вибираємо — він може бути доданий пізніше.
-          </p>
-
-        </div>
-
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
-          <button class="btn btn-primary" type="submit">Створити</button>
-        </div>
-
-      </form>
-
     </div>
-  </div>
 </div>

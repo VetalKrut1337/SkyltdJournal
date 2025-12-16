@@ -1,8 +1,8 @@
 <div class="modal fade" id="journalModal" tabindex="-1">
-  <div class="modal-dialog">
-    <form method="POST" id="journalForm" action="{% url 'journal_create' %}">
+  <div class="modal-dialog modal-lg">
+    <form method="POST" action="{% url 'journal_create' %}">
       {% csrf_token %}
-      <input type="hidden" name="department" id="departmentInput" value="{{ tab }}">
+      <input type="hidden" name="department" value="{{ tab }}">
 
       <div class="modal-content">
         <div class="modal-header">
@@ -11,25 +11,71 @@
         </div>
 
         <div class="modal-body">
-          {{ form.client }}
-          <br>
-          {{ form.phone }}
-          <br>
-          {% if tab == 'service' %}
-              {{ form.vehicle }}
-              <br>
-              {{ form.service }}
-              <br>
+
+          <h6>Клиент</h6>
+          <select name="client" class="form-select js-select2-client">
+            <option value="">— Новый клиент —</option>
+            {% for c in clients %}
+              <option value="{{ c.id }}" data-phone="{{ c.phone }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+
+          <div class="row mt-2">
+            <div class="col-md-6">
+              <label>Имя клиента</label>
+              <input name="client_name" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label>Телефон</label>
+              <input name="phone" class="form-control">
+            </div>
+          </div>
+
+          {% if tab == "service" %}
+          <hr>
+          <h6>Автомобиль</h6>
+
+          <select name="vehicle" class="form-select js-select2-vehicle">
+            <option value="">— Новая машина —</option>
+          </select>
+
+          <div class="row mt-2">
+            <div class="col-md-4">
+              <label>Номер</label>
+              <input name="plate_number" class="form-control">
+            </div>
+            <div class="col-md-4">
+              <label>Марка</label>
+              <input name="brand" class="form-control">
+            </div>
+            <div class="col-md-4">
+              <label>Модель</label>
+              <input name="model" class="form-control">
+            </div>
+          </div>
+
+          <hr>
+          <h6>Услуга</h6>
+          <select name="service" class="form-select js-select2-service">
+            <option value="">— Выберите услугу —</option>
+            {% for s in services %}
+              <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
           {% endif %}
-          {{ form.comment }}
+
+          <hr>
+          <label>Комментарий</label>
+          <textarea name="comment" class="form-control"></textarea>
+
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-          <button type="submit" class="btn btn-primary">Создать</button>
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+          <button class="btn btn-primary">Создать</button>
         </div>
-
       </div>
     </form>
   </div>
 </div>
+

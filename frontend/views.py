@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import render, redirect
@@ -9,13 +11,7 @@ from .forms import ClientCreateForm, VehicleCreateForm, JournalForm
 
 
 def clients_list(request):
-    clients = Client.objects.all().prefetch_related("vehicles")
-    free_vehicles = Vehicle.objects.filter(client__isnull=True)
-
-    return render(request, "clients/clients_list.html", {
-        "clients": clients,
-        "free_vehicles": free_vehicles
-    })
+    return render(request, "clients/clients_list.html")
 
 
 def client_create(request):
@@ -51,8 +47,7 @@ def client_create(request):
 
 
 def vehicles_list(request):
-    vehicles = Vehicle.objects.select_related("client")
-    return render(request, "vehicles/vehicles_list.html", {"vehicles": vehicles})
+    return render(request, "vehicles/vehicles_list.html")
 
 
 def vehicle_create(request):
@@ -67,7 +62,11 @@ def journal_list(request):
     search = request.GET.get("search", "")
     order = request.GET.get("order", "-date")
 
-    journals = JournalRecord.objects.filter(department=tab)
+    journals = (
+        JournalRecord.objects
+        .filter(department=tab)
+        .select_related("client", "vehicle", "service")
+    )
 
     if search:
         journals = journals.filter(
@@ -78,68 +77,98 @@ def journal_list(request):
 
     journals = journals.order_by(order)
 
-    form = JournalForm()
+    vehicles_qs = Vehicle.objects.select_related("client")
+    vehicles_by_client = {}
+    for v in vehicles_qs:
+        if not v.client_id:
+            continue
+        vehicles_by_client.setdefault(v.client_id, []).append({
+            "id": v.id,
+            "plate": v.plate_number,
+            "brand": v.brand,
+            "model": v.model,
+        })
+
     return render(request, "journals/journal_list.html", {
         "tab": tab,
         "journals": journals,
-        "form": form,
+        "clients": Client.objects.all(),
+        "vehicles": vehicles_qs,
+        "vehicles_by_client": json.dumps(vehicles_by_client),
+        "services": Service.objects.filter(is_active=True),
         "search": search,
         "order": order,
     })
 
 
 def journal_create(request):
-    if request.method == "POST":
-        department = request.POST.get("department")
-        client_id = request.POST.get("client")
-        client_name = request.POST.get("client_name")  # для нового клиента
-        phone = request.POST.get("phone")
+    if request.method != "POST":
+        return redirect("journal_list")
 
+    department = request.POST.get("department")
+
+    # -------- CLIENT --------
+    client_id = request.POST.get("client")
+    client_name = request.POST.get("client_name")
+    phone = request.POST.get("phone")
+
+    client = None
+    if client_id:
+        client = Client.objects.filter(id=client_id).first()
+    else:
+        if not client_name or not phone:
+            messages.error(request, "Для нового клиента нужно указать имя и телефон")
+            return redirect(f"/frontend/journal/?tab={department}")
+
+        client = Client.objects.create(
+            name=client_name,
+            phone=phone
+        )
+
+    # если телефон не введён, но клиент выбран — возьмём телефон клиента
+    if not phone and client and client.phone:
+        phone = client.phone
+
+    # -------- VEHICLE --------
+    vehicle = None
+    if department == "service":
         vehicle_id = request.POST.get("vehicle")
+        plate = request.POST.get("plate_number")
         brand = request.POST.get("brand")
         model = request.POST.get("model")
-        service_id = request.POST.get("service")
 
-        comment = request.POST.get("comment")
-
-        # ==== КЛИЕНТ ====
-        client = None
-        if client_id:
-            client = Client.objects.filter(id=client_id).first()
+        if vehicle_id:
+            vehicle = Vehicle.objects.filter(id=vehicle_id).first()
         else:
-            if client_name and phone:
-                client = Client.objects.create(name=client_name, phone=phone)
-            else:
-                messages.error(request, "Для нового клиента нужно указать имя и телефон")
+            if not brand or not model:
+                messages.error(request, "Для новой машины нужно указать марку и модель")
                 return redirect(f"/frontend/journal/?tab={department}")
 
-        # ==== МАШИНА ====
-        vehicle = None
-        if department == "service":
-            if vehicle_id:
-                vehicle = Vehicle.objects.filter(id=vehicle_id).first()
-            elif brand and model:
-                vehicle = Vehicle.objects.create(
-                    brand=brand,
-                    model=model,
-                    plate_number="",  # пустое поле
-                    client=client
-                )
+            vehicle = Vehicle.objects.create(
+                plate_number=plate or "",
+                brand=brand,
+                model=model,
+                client=client
+            )
 
-        # ==== СЕРВИС ====
-        service = None
-        if department == "service" and service_id:
-            service = Service.objects.filter(id=service_id).first()
+    # -------- SERVICE --------
+    service = None
+    service_id = request.POST.get("service")
+    if department == "service" and service_id:
+        service = Service.objects.filter(id=service_id).first()
 
-        # ==== СОЗДАНИЕ ЖУРНАЛА ====
-        JournalRecord.objects.create(
-            department=department,
-            client=client,
-            phone=phone,
-            vehicle=vehicle,
-            service=service,
-            comment=comment
-        )
+    # -------- JOURNAL --------
+    JournalRecord.objects.create(
+        department=department,
+        client=client,
+        phone=phone,
+        vehicle=vehicle,
+        service=service,
+        comment=request.POST.get("comment")
+    )
 
     return redirect(f"/frontend/journal/?tab={department}")
 
+
+def services_list(request):
+    return render(request, "services/services_list.html")

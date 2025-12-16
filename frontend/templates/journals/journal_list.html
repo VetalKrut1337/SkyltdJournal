@@ -4,7 +4,7 @@
 <div class="container mt-4">
   <h2>Журнал</h2>
 
-  <!-- Навигация по вкладкам -->
+  <!-- Tabs -->
   <ul class="nav nav-tabs">
     <li class="nav-item">
       <a class="nav-link {% if tab == 'sales' %}active{% endif %}" href="?tab=sales">Продажи</a>
@@ -14,17 +14,21 @@
     </li>
   </ul>
 
-  <!-- Фильтры -->
+  <!-- Filters -->
   <form method="get" class="row mt-3">
     <input type="hidden" name="tab" value="{{ tab }}">
-    <div class="col-md-4"><input name="search" value="{{ search }}" class="form-control" placeholder="Поиск..."></div>
+    <div class="col-md-4">
+      <input name="search" value="{{ search }}" class="form-control" placeholder="Поиск...">
+    </div>
     <div class="col-md-3">
       <select name="order" class="form-select">
         <option value="-date" {% if order == "-date" %}selected{% endif %}>Сначала новые</option>
         <option value="date" {% if order == "date" %}selected{% endif %}>Сначала старые</option>
       </select>
     </div>
-    <div class="col-md-2"><button class="btn btn-primary w-100">Фильтр</button></div>
+    <div class="col-md-2">
+      <button class="btn btn-primary w-100">Фильтр</button>
+    </div>
     <div class="col-md-3 text-end">
       <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#journalModal">
         + Добавить запись
@@ -32,7 +36,7 @@
     </div>
   </form>
 
-  <!-- Таблица -->
+  <!-- Table -->
   <table class="table table-striped mt-3">
     <thead>
       <tr>
@@ -40,53 +44,78 @@
         <th>Клиент</th>
         <th>Телефон</th>
         {% if tab == "service" %}
-        <th>Машина</th>
-        <th>Услуга</th>
+          <th>Номер</th>
+          <th>Марка</th>
+          <th>Модель</th>
+          <th>Услуга</th>
         {% endif %}
         <th>Комментарий</th>
       </tr>
     </thead>
     <tbody>
       {% for j in journals %}
-        <tr>
-          <td>{{ j.date }}</td>
-          <td>{{ j.client }}</td>
-          <td>{{ j.phone }}</td>
-          {% if tab == "service" %}
-          <td>{{ j.vehicle }}</td>
+      <tr>
+        <td>{{ j.date|date:"d.m.Y H:i" }}</td>
+        <td>{{ j.client }}</td>
+        <td>{{ j.phone }}</td>
+        {% if tab == "service" %}
+          <td>{{ j.vehicle.plate_number }}</td>
+          <td>{{ j.vehicle.brand }}</td>
+          <td>{{ j.vehicle.model }}</td>
           <td>{{ j.service }}</td>
-          {% endif %}
-          <td>{{ j.comment }}</td>
-        </tr>
+        {% endif %}
+        <td>{{ j.comment }}</td>
+      </tr>
       {% empty %}
-        <tr><td colspan="6" class="text-center">Нет записей</td></tr>
+      <tr>
+        <td colspan="8" class="text-center">Нет записей</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
-<!-- Модальное окно -->
 {% include "journals/journal_modal.html" %}
-
 {% endblock %}
 
 {% block extra_js %}
 <script>
-$(document).ready(function() {
-    $('.js-select2-client').select2({ width: '100%' });
-    $('.js-select2-vehicle').select2({ width: '100%' });
-    $('.js-select2-service').select2({ width: '100%' });
+const VEHICLES = JSON.parse('{{ vehicles_by_client|escapejs }}');
 
-    // автозаполнение телефона при выборе клиента
-    $('.js-select2-client').on('change', function() {
-        var phone = $(this).find(':selected').data('phone');
-        $('#id_phone').val(phone);
+$(function () {
+  $('.js-select2-client').select2({ width: '100%' });
+  $('.js-select2-vehicle').select2({ width: '100%' });
+  $('.js-select2-service').select2({ width: '100%' });
+
+  $('.js-select2-client').on('change', function () {
+    const opt = $(this).find(':selected');
+    const clientId = opt.val();
+
+    $('input[name="phone"]').val(opt.data('phone') || '');
+
+    const vehicleSelect = $('.js-select2-vehicle');
+    vehicleSelect.empty().append('<option value="">— Новая машина —</option>');
+
+    (VEHICLES[clientId] || []).forEach(v => {
+      vehicleSelect.append(
+        `<option value="${v.id}"
+          data-plate="${v.plate}"
+          data-brand="${v.brand}"
+          data-model="${v.model}">
+          ${v.plate} | ${v.brand} ${v.model}
+        </option>`
+      );
     });
 
-    // автозаполнение машины для сервиса
-    $('.js-select2-vehicle').on('change', function() {
-        // при желании можно подтягивать бренд/модель
-    });
+    vehicleSelect.trigger('change');
+  });
+
+  $('.js-select2-vehicle').on('change', function () {
+    const opt = $(this).find(':selected');
+    $('input[name="plate_number"]').val(opt.data('plate') || '');
+    $('input[name="brand"]').val(opt.data('brand') || '');
+    $('input[name="model"]').val(opt.data('model') || '');
+  });
 });
 </script>
 {% endblock %}
