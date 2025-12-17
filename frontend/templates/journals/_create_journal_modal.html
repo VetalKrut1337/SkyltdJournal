@@ -1,0 +1,208 @@
+<div class="modal fade" id="createJournalModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-lg">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <div>
+
+                    <h5 class="modal-title mb-0">Новий запис журналу</h5>
+
+                    <small class="text-muted">
+
+                        Відділ: <span id="journalDepartmentLabel">Відділ продажу</span>
+
+                    </small>
+
+                </div>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+            </div>
+
+
+
+            <div class="modal-body">
+
+                <div id="journalFormError" class="alert alert-danger" style="display:none"></div>
+
+
+
+                <input type="hidden" id="journalDepartment">
+
+
+
+                <div class="row">
+
+                    <div class="col-md-6 mb-3" style="position: relative;">
+
+                        <label for="journalClientNameInput" class="form-label">Ім'я клієнта</label>
+
+                        <input id="journalClientNameInput"
+
+                               type="text"
+
+                               class="form-control"
+
+                               placeholder="Пошук або введення нового клієнта"
+
+                               autocomplete="off">
+
+                        <div id="journalClientSearchResults"
+
+                             class="list-group"
+
+                             style="position: absolute; z-index: 1000; max-height: 200px; overflow-y: auto; display: none; width: 100%; top: 100%; margin-top: 2px; border: 1px solid #ced4da; border-radius: 0.375rem;"></div>
+
+                        <input type="hidden" id="journalClientIdInput" value="">
+
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+
+                        <label for="journalClientPhoneInput" class="form-label">Телефон</label>
+
+                        <input id="journalClientPhoneInput"
+
+                               type="text"
+
+                               class="form-control"
+
+                               placeholder="Номер телефону">
+
+                    </div>
+
+                </div>
+
+
+
+                <div id="journalServiceBlock" style="display:none">
+
+                    <hr>
+
+
+
+                    <div class="mb-3">
+
+                        <label for="journalVehicleSelect" class="form-label">Авто клієнта (якщо вже існує)</label>
+
+                        <select id="journalVehicleSelect" class="form-select" disabled>
+
+                            <option value="">-- Нове авто / не вибрано --</option>
+
+                        </select>
+
+                        <input type="hidden" id="journalVehicleIdInput" value="">
+
+                        <div class="form-text">Якщо вибрати авто зі списку, його дані автоматично підтягнуться нижче.</div>
+
+                    </div>
+
+
+
+                    <div class="row">
+
+                        <div class="col-md-4 mb-3">
+
+                            <label for="journalPlateInput" class="form-label">Номер авто</label>
+
+                            <input id="journalPlateInput"
+
+                                   type="text"
+
+                                   class="form-control"
+
+                                   placeholder="АА1234ВС">
+
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+
+                            <label for="journalBrandInput" class="form-label">Марка</label>
+
+                            <input id="journalBrandInput"
+
+                                   type="text"
+
+                                   class="form-control"
+
+                                   placeholder="BMW, Audi...">
+
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+
+                            <label for="journalModelInput" class="form-label">Модель</label>
+
+                            <input id="journalModelInput"
+
+                                   type="text"
+
+                                   class="form-control"
+
+                                   placeholder="X5, A6...">
+
+                        </div>
+
+                    </div>
+
+
+
+                    <div class="mb-3">
+
+                        <label for="journalServiceSelect" class="form-label">Сервісні послуги</label>
+
+                        <select id="journalServiceSelect" class="form-select" multiple size="5">
+
+                        </select>
+
+                        <div class="form-text">
+
+                            Можна вибрати кілька послуг одночасно (утримуйте Ctrl/Cmd для вибору кількох). Показуються лише активні послуги.
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="mb-3">
+
+                    <label for="journalCommentInput" class="form-label">Коментар</label>
+
+                    <textarea id="journalCommentInput"
+
+                              class="form-control"
+
+                              rows="3"
+
+                              placeholder="Додатковий коментар..."></textarea>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="modal-footer">
+
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+
+                <button type="button" class="btn btn-primary" id="saveJournalBtn" onclick="createJournal()">
+
+                    Зберегти
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+

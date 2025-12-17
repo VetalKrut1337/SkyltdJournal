@@ -1,0 +1,1696 @@
+{% extends "base.html" %}
+
+{% block title %}Журнал{% endblock %}
+
+
+
+{% block content %}
+
+
+
+<h2 class="mb-3">Журнал</h2>
+
+
+
+<ul class="nav nav-tabs mb-3" id="journalTabs">
+
+    <li class="nav-item">
+
+        <button class="nav-link active" data-department="sales" type="button">
+
+            Відділ продажу
+
+        </button>
+
+    </li>
+
+    <li class="nav-item">
+
+        <button class="nav-link" data-department="service" type="button">
+
+            Сервіс
+
+        </button>
+
+    </li>
+
+</ul>
+
+
+
+<div class="row mb-3">
+
+    <div class="col-md-4">
+
+        <input id="searchInput"
+
+               type="text"
+
+               class="form-control"
+
+               placeholder="Пошук по клієнту, телефону, авто або коментарю...">
+
+    </div>
+
+
+
+    <div class="col-md-4">
+
+        <select id="sortSelect" class="form-select">
+
+            <option value="">Сортувати...</option>
+
+            <option value="-date">Дата (нові → старі)</option>
+
+            <option value="date">Дата (старі → нові)</option>
+
+            <option value="client">Клієнт (A→Z)</option>
+
+        </select>
+
+    </div>
+
+
+
+    <div class="col-md-4 text-end">
+
+        <button class="btn btn-success me-2"
+
+                data-bs-toggle="modal"
+
+                data-bs-target="#createJournalModal">
+
+            Додати запис
+
+        </button>
+
+        <button class="btn btn-primary" type="button" onclick="loadJournals()">
+
+            Оновити список
+
+        </button>
+
+    </div>
+
+</div>
+
+
+
+<div id="loadingSpinner" class="text-center py-5" style="display: none;">
+
+    <div class="spinner-border" role="status">
+
+        <span class="visually-hidden">Завантаження...</span>
+
+    </div>
+
+</div>
+
+
+
+<table class="table table-bordered table-striped" id="journalTable" style="display: none;">
+
+    <thead>
+
+    <tr id="journalHeader"></tr>
+
+    </thead>
+
+    <tbody id="journalBody"></tbody>
+
+</table>
+
+
+
+<div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+
+
+{% include "journals/_create_journal_modal.html" %}
+{% include "journals/_edit_comment_modal.html" %}
+
+{% endblock %}
+
+
+
+{% block scripts %}
+
+<script>
+
+let currentDepartment = "sales";
+
+let allJournals = [];
+
+let journalAllClients = [];
+
+
+
+function getCookie(name) {
+
+    let cookieValue = null;
+
+    if (document.cookie && document.cookie !== "") {
+
+        const cookies = document.cookie.split(";");
+
+        for (let i = 0; i < cookies.length; i++) {
+
+            const cookie = cookies[i].trim();
+
+            if (cookie.substring(0, name.length + 1) === (name + "=")) {
+
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+
+                break;
+
+            }
+
+        }
+
+    }
+
+    return cookieValue;
+
+}
+
+
+
+function loadJournals() {
+
+    const spinner = document.getElementById("loadingSpinner");
+
+    const table = document.getElementById("journalTable");
+
+    const errorMsg = document.getElementById("errorMessage");
+
+
+
+    spinner.style.display = "block";
+
+    table.style.display = "none";
+
+    errorMsg.style.display = "none";
+
+
+
+    fetch(`/api/journals/?department=${currentDepartment}`, {
+
+        credentials: "include"
+
+    })
+
+        .then(response => {
+
+            if (!response.ok) {
+
+                throw new Error(`HTTP error! status: ${response.status}`);
+
+            }
+
+            return response.json();
+
+        })
+
+        .then(data => {
+
+            allJournals = data.results || [];
+
+            applyJournalFilters();
+
+
+
+            spinner.style.display = "none";
+
+            table.style.display = "table";
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка завантаження журналу:", error);
+
+            errorMsg.textContent = `Помилка завантаження даних: ${error.message}`;
+
+            errorMsg.style.display = "block";
+
+            spinner.style.display = "none";
+
+        });
+
+}
+
+
+
+function applyJournalFilters() {
+
+    const searchInput = document.getElementById("searchInput");
+
+    const sortSelect = document.getElementById("sortSelect");
+
+
+
+    const q = (searchInput.value || "").toLowerCase();
+
+    const sortField = sortSelect.value;
+
+
+
+    let filtered = allJournals.filter(r => {
+
+        const clientName = (r.client && r.client.name ? r.client.name : "").toLowerCase();
+
+        const phone = (r.phone || "").toLowerCase();
+
+        const comment = (r.comment || "").toLowerCase();
+
+        const vehicle = r.vehicle || {};
+
+        const vehicleStr = [
+
+            vehicle.plate_number || "",
+
+            vehicle.brand || "",
+
+            vehicle.model || ""
+
+        ].join(" ").toLowerCase();
+
+        const serviceName = r.service && r.service.name ? r.service.name.toLowerCase() : "";
+
+        let allServiceNames = [];
+        if (r.service && r.service.name) allServiceNames.push(r.service.name.toLowerCase());
+        if (Array.isArray(r.services)) r.services.forEach(s => s && s.name && allServiceNames.push(s.name.toLowerCase()));
+        const servicesQ = allServiceNames.join(" ");
+
+
+
+        return (
+
+            clientName.includes(q) ||
+
+            phone.includes(q) ||
+
+            comment.includes(q) ||
+
+            vehicleStr.includes(q) ||
+
+            serviceName.includes(q) ||
+
+            servicesQ.includes(q)
+
+        );
+
+    });
+
+
+
+    if (sortField) {
+
+        const isDate = sortField === "date" || sortField === "-date";
+
+        const isDesc = sortField.startsWith("-");
+
+        const key = isDesc ? sortField.substring(1) : sortField;
+
+
+
+        filtered.sort((a, b) => {
+
+            if (key === "client") {
+
+                const aName = (a.client && a.client.name ? a.client.name : "").toLowerCase();
+
+                const bName = (b.client && b.client.name ? b.client.name : "").toLowerCase();
+
+                const cmp = aName.localeCompare(bName);
+
+                return isDesc ? -cmp : cmp;
+
+            }
+
+
+
+            if (key === "date" && isDate) {
+
+                const aDate = new Date(a.date);
+
+                const bDate = new Date(b.date);
+
+                return isDesc ? bDate - aDate : aDate - bDate;
+
+            }
+
+
+
+            return 0;
+
+        });
+
+    }
+
+
+
+    renderJournals(filtered);
+
+}
+
+
+
+function formatDate(dateStr) {
+
+    if (!dateStr) return "-";
+
+    try {
+
+        const d = new Date(dateStr);
+
+        return d.toLocaleString("uk-UA");
+
+    } catch (e) {
+
+        return dateStr;
+
+    }
+
+}
+
+function formatComment(comment) {
+
+    if (!comment) return "-";
+
+    // Экранируем HTML для безопасности (кроме уже существующих тегов от бэкенда)
+
+    const escapeHtml = (text) => {
+
+        const div = document.createElement("div");
+
+        div.textContent = text;
+
+        return div.innerHTML;
+
+    };
+
+
+
+    // Разбиваем по двойным переносам строк (дополнения идут после пустой строки)
+
+    const parts = comment.split(/\n\n/);
+
+    if (parts.length === 1) {
+
+        // Нет дополнений, проверяем есть ли HTML теги
+
+        if (parts[0].includes("<strong>")) {
+
+            // Уже есть HTML от бэкенда, просто заменяем переносы строк
+
+            return parts[0].replace(/\n/g, "<br>");
+
+        }
+
+        // Просто текст, экранируем и заменяем переносы
+
+        return escapeHtml(parts[0]).replace(/\n/g, "<br>");
+
+    }
+
+    // Есть дополнения, форматируем их компактно
+
+    let html = "";
+
+    // Первая часть (оригинальный комментарий)
+
+    if (parts[0]) {
+
+        html = escapeHtml(parts[0]).replace(/\n/g, "<br>");
+
+    }
+
+    // Обрабатываем дополнения (без разделителей, просто новая строка)
+
+    for (let i = 1; i < parts.length; i++) {
+
+        const part = parts[i];
+
+        // Проверяем, есть ли метка "Доповнення від" с HTML тегами
+
+        if (part.includes("<strong>Доповнення від")) {
+
+            // HTML теги уже есть от бэкенда
+
+            const lines = part.split("\n");
+
+            const header = lines[0]; // Содержит <strong>Доповнення від...</strong>
+
+            const content = lines.slice(1).join("\n");
+
+            html += `<br><div class="text-muted small mt-2">${header}</div><div>${escapeHtml(content).replace(/\n/g, "<br>")}</div>`;
+
+        } else {
+
+            // Обычный текст, экранируем
+
+            html += `<br><div>${escapeHtml(part).replace(/\n/g, "<br>")}</div>`;
+
+        }
+
+    }
+
+    return html;
+
+}
+
+
+
+function renderJournals(records) {
+
+    const head = document.getElementById("journalHeader");
+
+    const body = document.getElementById("journalBody");
+
+
+
+    head.innerHTML = "";
+
+    body.innerHTML = "";
+
+
+
+    if (currentDepartment === "sales") {
+
+        head.innerHTML = `
+
+            <th>Дата</th>
+
+            <th>Клієнт</th>
+
+            <th>Телефон</th>
+
+            <th>Коментар</th>
+
+            <th>Дії</th>
+
+        `;
+
+    } else {
+
+        head.innerHTML = `
+
+            <th>Дата</th>
+
+            <th>Клієнт</th>
+
+            <th>Телефон</th>
+
+            <th>Авто</th>
+
+            <th>Послуга</th>
+
+            <th>Коментар</th>
+
+            <th>Дії</th>
+
+        `;
+
+    }
+
+
+
+    if (!records.length) {
+
+        const colspan = currentDepartment === "sales" ? 5 : 7;
+
+        body.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Записів не знайдено</td></tr>`;
+
+        return;
+
+    }
+
+
+
+    records.forEach(r => {
+
+        const clientName = r.client && r.client.name ? r.client.name : "";
+
+        const phone = r.phone || (r.client && r.client.phone ? r.client.phone : "");
+
+        const comment = r.comment || "";
+
+
+
+        const vehicle = r.vehicle || {};
+
+        const vehicleStr = vehicle.plate_number
+
+            ? `${vehicle.plate_number} (${vehicle.brand || ""} ${vehicle.model || ""})`
+
+            : `${vehicle.brand || ""} ${vehicle.model || ""}`.trim();
+
+
+
+        // Формируем список сервисов (старый service + новые services)
+        let serviceNames = [];
+        if (r.service && r.service.name) {
+            serviceNames.push(r.service.name);
+        }
+        if (r.services && Array.isArray(r.services)) {
+            r.services.forEach(s => {
+                if (s && s.name && !serviceNames.includes(s.name)) {
+                    serviceNames.push(s.name);
+                }
+            });
+        }
+        const serviceName = serviceNames.length > 0 ? serviceNames.join(", ") : "";
+
+
+
+        const formattedComment = formatComment(comment);
+
+        if (currentDepartment === "sales") {
+
+            body.innerHTML += `
+
+                <tr>
+
+                    <td>${formatDate(r.date)}</td>
+
+                    <td>${clientName}</td>
+
+                    <td>${phone}</td>
+
+                    <td>${formattedComment}</td>
+
+                    <td>
+
+                        <button class="btn btn-sm btn-primary" onclick="openEditCommentModal(${r.id})">
+
+                            Доповнити коментар
+
+                        </button>
+
+                    </td>
+
+                </tr>
+
+            `;
+
+        } else {
+
+            body.innerHTML += `
+
+                <tr>
+
+                    <td>${formatDate(r.date)}</td>
+
+                    <td>${clientName}</td>
+
+                    <td>${phone}</td>
+
+                    <td>${vehicleStr || "-"}</td>
+
+                    <td>${serviceName || "-"}</td>
+
+                    <td>${formattedComment}</td>
+
+                    <td>
+
+                        <button class="btn btn-sm btn-primary" onclick="openEditCommentModal(${r.id})">
+
+                            Доповнити коментар
+
+                        </button>
+
+                    </td>
+
+                </tr>
+
+            `;
+
+        }
+
+    });
+
+}
+
+
+
+function createJournal() {
+
+    const errorDiv = document.getElementById("journalFormError");
+
+    const saveBtn = document.getElementById("saveJournalBtn");
+
+    const departmentInput = document.getElementById("journalDepartment");
+
+    const clientNameInput = document.getElementById("journalClientNameInput");
+
+    const clientPhoneInput = document.getElementById("journalClientPhoneInput");
+
+    const clientIdInput = document.getElementById("journalClientIdInput");
+
+    const commentInput = document.getElementById("journalCommentInput");
+
+    const plateInput = document.getElementById("journalPlateInput");
+
+    const brandInput = document.getElementById("journalBrandInput");
+
+    const modelInput = document.getElementById("journalModelInput");
+
+    const serviceSelect = document.getElementById("journalServiceSelect");
+
+    const vehicleIdInput = document.getElementById("journalVehicleIdInput");
+
+
+
+    const department = departmentInput.value || currentDepartment;
+
+    const name = clientNameInput.value.trim();
+
+    const phone = clientPhoneInput.value.trim();
+
+    const clientId = clientIdInput && clientIdInput.value
+
+        ? parseInt(clientIdInput.value)
+
+        : null;
+
+    const comment = commentInput.value.trim();
+
+    const plate = plateInput ? plateInput.value.trim() : "";
+
+    const brand = brandInput ? brandInput.value.trim() : "";
+
+    const model = modelInput ? modelInput.value.trim() : "";
+
+    const serviceIds = serviceSelect 
+        ? Array.from(serviceSelect.selectedOptions).map(opt => parseInt(opt.value))
+        : [];
+
+    const vehicleId = vehicleIdInput && vehicleIdInput.value
+
+        ? parseInt(vehicleIdInput.value)
+
+        : null;
+
+
+
+    errorDiv.style.display = "none";
+
+    errorDiv.textContent = "";
+
+    clientNameInput.classList.remove("is-invalid");
+
+    clientPhoneInput.classList.remove("is-invalid");
+
+    if (plateInput) plateInput.classList.remove("is-invalid");
+
+    if (brandInput) brandInput.classList.remove("is-invalid");
+
+    if (modelInput) modelInput.classList.remove("is-invalid");
+
+
+
+    if (!name || !phone) {
+
+        errorDiv.textContent = "Будь ласка, введіть ім'я клієнта та телефон";
+
+        errorDiv.style.display = "block";
+
+        if (!name) clientNameInput.classList.add("is-invalid");
+
+        if (!phone) clientPhoneInput.classList.add("is-invalid");
+
+        return;
+
+    }
+
+
+
+    if (department === "service" && !vehicleId) {
+
+        if (!brand || !model) {
+
+            errorDiv.textContent = "Для сервісу потрібно вказати марку та модель авто (або вибрати існуюче авто клієнта)";
+
+            errorDiv.style.display = "block";
+
+            if (!brand && brandInput) brandInput.classList.add("is-invalid");
+
+            if (!model && modelInput) modelInput.classList.add("is-invalid");
+
+            return;
+
+        }
+
+    }
+
+
+
+    saveBtn.disabled = true;
+
+    saveBtn.textContent = "Збереження...";
+
+
+
+    const payload = {
+
+        department: department,
+
+        client_name: name,
+
+        phone: phone,
+
+        comment: comment
+
+    };
+
+
+
+    if (clientId) {
+
+        payload.client_id = clientId;
+
+    }
+
+
+
+    if (department === "service") {
+
+        if (vehicleId) {
+
+            payload.vehicle_id = vehicleId;
+
+        } else {
+
+            payload.plate_number = plate;
+
+            payload.brand = brand;
+
+            payload.model = model;
+
+        }
+
+        if (serviceIds && serviceIds.length > 0) {
+
+            payload.service_ids = serviceIds;
+
+        }
+
+    }
+
+
+
+    const csrftoken = getCookie("csrftoken");
+
+
+
+    fetch("/api/journals/", {
+
+        method: "POST",
+
+        headers: {
+
+            "Content-Type": "application/json",
+
+            "X-CSRFToken": csrftoken
+
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify(payload)
+
+    })
+
+        .then(response => {
+
+            if (!response.ok) {
+
+                return response.json().then(err => Promise.reject(err));
+
+            }
+
+            return response.json();
+
+        })
+
+        .then(() => {
+
+            const modalEl = document.getElementById("createJournalModal");
+
+            const modal = bootstrap.Modal.getInstance(modalEl);
+
+            if (modal) {
+
+                modal.hide();
+
+            }
+
+
+
+            clientNameInput.value = "";
+
+            clientPhoneInput.value = "";
+
+            commentInput.value = "";
+
+            if (plateInput) plateInput.value = "";
+
+            if (brandInput) brandInput.value = "";
+
+            if (modelInput) modelInput.value = "";
+
+            if (serviceSelect) {
+                // Очищаем множественный выбор
+                Array.from(serviceSelect.options).forEach(opt => opt.selected = false);
+            }
+
+            if (vehicleIdInput) vehicleIdInput.value = "";
+
+
+
+            loadJournals();
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка створення запису журналу:", error);
+
+            let errorMessage = "Помилка при створенні запису журналу";
+
+            if (error.error) {
+
+                errorMessage = error.error;
+
+            } else if (error.detail) {
+
+                errorMessage = error.detail;
+
+            } else if (error.message) {
+
+                errorMessage = error.message;
+
+            }
+
+            errorDiv.textContent = errorMessage;
+
+            errorDiv.style.display = "block";
+
+        })
+
+        .finally(() => {
+
+            saveBtn.disabled = false;
+
+            saveBtn.textContent = "Зберегти";
+
+        });
+
+}
+
+
+
+function loadActiveServicesIntoSelect() {
+
+    const select = document.getElementById("journalServiceSelect");
+
+    if (!select) return;
+
+
+
+    select.innerHTML = "";
+
+
+
+    fetch("/api/services/", {
+
+        credentials: "include"
+
+    })
+
+        .then(response => response.json())
+
+        .then(data => {
+
+            const services = data.results || [];
+
+            services
+
+                .filter(s => s.is_active !== false)
+
+                .forEach(s => {
+
+                    const option = document.createElement("option");
+
+                    option.value = s.id;
+
+                    option.textContent = s.name;
+
+                    select.appendChild(option);
+
+                });
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка завантаження сервісів для журналу:", error);
+
+        });
+
+}
+
+
+
+function loadJournalClients() {
+
+    if (journalAllClients.length > 0) {
+
+        return;
+
+    }
+
+
+
+    fetch("/api/clients/", {
+
+        credentials: "include"
+
+    })
+
+        .then(response => response.json())
+
+        .then(data => {
+
+            journalAllClients = data.results || [];
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка завантаження клієнтів для журналу:", error);
+
+        });
+
+}
+
+function openEditCommentModal(journalId) {
+
+    const modalEl = document.getElementById("editCommentModal");
+
+    const journalIdInput = document.getElementById("editJournalIdInput");
+
+    const currentCommentDiv = document.getElementById("editCurrentComment");
+
+    const newCommentInput = document.getElementById("editNewCommentInput");
+
+
+
+    if (!modalEl || !journalIdInput || !currentCommentDiv || !newCommentInput) return;
+
+
+
+    journalIdInput.value = journalId;
+
+    newCommentInput.value = "";
+
+    document.getElementById("editCommentFormError").style.display = "none";
+
+    document.getElementById("editCommentFormError").textContent = "";
+
+    currentCommentDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> Завантаження...</div>';
+
+
+
+    // Загружаем текущий комментарий с сервера
+
+    fetch(`/api/journals/${journalId}/`, {
+
+        credentials: "include"
+
+    })
+
+        .then(response => response.json())
+
+        .then(data => {
+
+            const currentComment = data.comment || "";
+
+            if (currentComment) {
+
+                currentCommentDiv.innerHTML = `<div class="alert alert-light"><strong>Поточний коментар:</strong><div class="mt-2">${formatComment(currentComment)}</div></div>`;
+
+            } else {
+
+                currentCommentDiv.innerHTML = '<div class="alert alert-light text-muted">Коментар відсутній</div>';
+
+            }
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка завантаження коментаря:", error);
+
+            currentCommentDiv.innerHTML = '<div class="alert alert-warning">Помилка завантаження коментаря</div>';
+
+        });
+
+
+
+    const modal = new bootstrap.Modal(modalEl);
+
+    modal.show();
+
+}
+
+function updateJournalComment() {
+
+    const errorDiv = document.getElementById("editCommentFormError");
+
+    const saveBtn = document.getElementById("saveCommentBtn");
+
+    const journalIdInput = document.getElementById("editJournalIdInput");
+
+    const newCommentInput = document.getElementById("editNewCommentInput");
+
+
+
+    const journalId = journalIdInput.value;
+
+    const newComment = newCommentInput.value.trim();
+
+
+
+    errorDiv.style.display = "none";
+
+    errorDiv.textContent = "";
+
+    newCommentInput.classList.remove("is-invalid");
+
+
+
+    if (!newComment) {
+
+        errorDiv.textContent = "Будь ласка, введіть доповнення до коментаря";
+
+        errorDiv.style.display = "block";
+
+        newCommentInput.classList.add("is-invalid");
+
+        return;
+
+    }
+
+
+
+    saveBtn.disabled = true;
+
+    saveBtn.textContent = "Збереження...";
+
+
+
+    const csrftoken = getCookie("csrftoken");
+
+
+
+    fetch(`/api/journals/${journalId}/`, {
+
+        method: "PATCH",
+
+        headers: {
+
+            "Content-Type": "application/json",
+
+            "X-CSRFToken": csrftoken
+
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify({ comment: newComment })
+
+    })
+        .then(response => {
+            const ct = response.headers.get("content-type") || "";
+            if (!response.ok) {
+                if (ct.indexOf("application/json") === -1) {
+                    // возвращаем спец ошибку
+                    throw new Error("Сесія закінчена або відсутній доступ. Перезайдіть та спробуйте ще раз.");
+                }
+                return response.json().then(err => Promise.reject(err));
+            }
+            return response.json();
+        })
+
+        .then(() => {
+
+            const modalEl = document.getElementById("editCommentModal");
+
+            const modal = bootstrap.Modal.getInstance(modalEl);
+
+            if (modal) {
+
+                modal.hide();
+
+            }
+
+            newCommentInput.value = "";
+
+            loadJournals();
+
+        })
+
+        .catch(error => {
+
+            console.error("Помилка оновлення коментаря:", error);
+
+            let errorMessage = "Помилка при оновленні коментаря";
+
+            if (error.error) {
+
+                errorMessage = error.error;
+
+            } else if (error.detail) {
+
+                errorMessage = error.detail;
+
+            } else if (error.message) {
+
+                errorMessage = error.message;
+
+            }
+
+            errorDiv.textContent = errorMessage;
+
+            errorDiv.style.display = "block";
+
+        })
+
+        .finally(() => {
+
+            saveBtn.disabled = false;
+
+            saveBtn.textContent = "Зберегти";
+
+        });
+
+}
+
+
+
+function populateJournalVehiclesForClient(client) {
+
+    const vehicleSelect = document.getElementById("journalVehicleSelect");
+
+    const vehicleIdInput = document.getElementById("journalVehicleIdInput");
+
+    const plateInput = document.getElementById("journalPlateInput");
+
+    const brandInput = document.getElementById("journalBrandInput");
+
+    const modelInput = document.getElementById("journalModelInput");
+
+
+
+    if (!vehicleSelect || !vehicleIdInput) return;
+
+
+
+    vehicleSelect.innerHTML = '<option value="">-- Нове авто / не вибрано --</option>';
+
+    vehicleIdInput.value = "";
+
+    vehicleSelect.disabled = true;
+
+
+
+    if (!client || !client.vehicles || !client.vehicles.length) {
+
+        return;
+
+    }
+
+
+
+    client.vehicles.forEach(v => {
+
+        const opt = document.createElement("option");
+
+        opt.value = v.id;
+
+        opt.textContent = `${v.plate_number || ""} (${v.brand || ""} ${v.model || ""})`;
+
+        vehicleSelect.appendChild(opt);
+
+    });
+
+
+
+    vehicleSelect.disabled = false;
+
+
+
+    vehicleSelect.onchange = () => {
+
+        const selectedId = vehicleSelect.value;
+
+        vehicleIdInput.value = selectedId || "";
+
+
+
+        const found = client.vehicles.find(v => String(v.id) === String(selectedId));
+
+        if (found) {
+
+            if (plateInput) plateInput.value = found.plate_number || "";
+
+            if (brandInput) brandInput.value = found.brand || "";
+
+            if (modelInput) modelInput.value = found.model || "";
+
+        }
+
+    };
+
+}
+
+
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    const tabs = document.querySelectorAll("#journalTabs button[data-department]");
+
+    tabs.forEach(btn => {
+
+        btn.addEventListener("click", () => {
+
+            tabs.forEach(x => x.classList.remove("active"));
+
+            btn.classList.add("active");
+
+            currentDepartment = btn.getAttribute("data-department") || "sales";
+
+            loadJournals();
+
+        });
+
+    });
+
+
+
+    document.getElementById("searchInput").addEventListener("keyup", applyJournalFilters);
+
+    document.getElementById("sortSelect").addEventListener("change", applyJournalFilters);
+
+
+
+    const modalEl = document.getElementById("createJournalModal");
+
+    if (modalEl) {
+
+        modalEl.addEventListener("show.bs.modal", () => {
+
+            const departmentInput = document.getElementById("journalDepartment");
+
+            const deptLabel = document.getElementById("journalDepartmentLabel");
+
+            const serviceBlock = document.getElementById("journalServiceBlock");
+
+            const clientIdInput = document.getElementById("journalClientIdInput");
+
+            const clientResults = document.getElementById("journalClientSearchResults");
+
+            const vehicleSelect = document.getElementById("journalVehicleSelect");
+
+            const vehicleIdInput = document.getElementById("journalVehicleIdInput");
+
+
+
+            departmentInput.value = currentDepartment;
+
+            if (deptLabel) {
+
+                deptLabel.textContent = currentDepartment === "sales" ? "Відділ продажу" : "Сервіс";
+
+            }
+
+
+
+            if (serviceBlock) {
+
+                serviceBlock.style.display = currentDepartment === "service" ? "block" : "none";
+
+            }
+
+
+
+            if (clientIdInput) {
+
+                clientIdInput.value = "";
+
+            }
+
+            if (clientResults) {
+
+                clientResults.style.display = "none";
+
+                clientResults.innerHTML = "";
+
+            }
+
+            if (vehicleSelect && vehicleIdInput) {
+
+                vehicleSelect.innerHTML = '<option value="">-- Нове авто / не вибрано --</option>';
+
+                vehicleSelect.disabled = true;
+
+                vehicleIdInput.value = "";
+
+            }
+
+
+
+            loadJournalClients();
+
+
+
+            if (currentDepartment === "service") {
+
+                loadActiveServicesIntoSelect();
+
+            }
+
+        });
+
+
+
+        modalEl.addEventListener("hidden.bs.modal", () => {
+
+            const errorDiv = document.getElementById("journalFormError");
+
+            const clientNameInput = document.getElementById("journalClientNameInput");
+
+            const clientPhoneInput = document.getElementById("journalClientPhoneInput");
+
+            const clientIdInput = document.getElementById("journalClientIdInput");
+
+            const clientResults = document.getElementById("journalClientSearchResults");
+
+            const commentInput = document.getElementById("journalCommentInput");
+
+            const plateInput = document.getElementById("journalPlateInput");
+
+            const brandInput = document.getElementById("journalBrandInput");
+
+            const modelInput = document.getElementById("journalModelInput");
+
+            const serviceSelect = document.getElementById("journalServiceSelect");
+
+            const vehicleSelect = document.getElementById("journalVehicleSelect");
+
+            const vehicleIdInput = document.getElementById("journalVehicleIdInput");
+
+
+
+            if (errorDiv) {
+
+                errorDiv.style.display = "none";
+
+                errorDiv.textContent = "";
+
+            }
+
+
+
+            if (clientNameInput) {
+
+                clientNameInput.value = "";
+
+                clientNameInput.classList.remove("is-invalid");
+
+            }
+
+            if (clientPhoneInput) {
+
+                clientPhoneInput.value = "";
+
+                clientPhoneInput.classList.remove("is-invalid");
+
+            }
+
+            if (clientIdInput) {
+
+                clientIdInput.value = "";
+
+            }
+
+            if (clientResults) {
+
+                clientResults.style.display = "none";
+
+                clientResults.innerHTML = "";
+
+            }
+
+            if (commentInput) {
+
+                commentInput.value = "";
+
+            }
+
+            if (plateInput) {
+
+                plateInput.value = "";
+
+                plateInput.classList.remove("is-invalid");
+
+            }
+
+            if (brandInput) {
+
+                brandInput.value = "";
+
+                brandInput.classList.remove("is-invalid");
+
+            }
+
+            if (modelInput) {
+
+                modelInput.value = "";
+
+                modelInput.classList.remove("is-invalid");
+
+            }
+
+            if (serviceSelect) {
+
+                serviceSelect.value = "";
+
+            }
+
+            if (vehicleSelect && vehicleIdInput) {
+
+                vehicleSelect.innerHTML = '<option value="">-- Нове авто / не вибрано --</option>';
+
+                vehicleSelect.disabled = true;
+
+                vehicleIdInput.value = "";
+
+            }
+
+        });
+
+    }
+
+
+
+    const clientNameInput = document.getElementById("journalClientNameInput");
+
+    const clientPhoneInput = document.getElementById("journalClientPhoneInput");
+
+    const clientIdInput = document.getElementById("journalClientIdInput");
+
+    const clientResults = document.getElementById("journalClientSearchResults");
+
+
+
+    if (clientNameInput && clientResults && clientIdInput) {
+
+        clientNameInput.addEventListener("input", () => {
+
+            const query = clientNameInput.value.trim().toLowerCase();
+
+
+
+            if (query.length < 1) {
+
+                clientResults.style.display = "none";
+
+                clientResults.innerHTML = "";
+
+                clientIdInput.value = "";
+
+
+
+                const vehicleSelect = document.getElementById("journalVehicleSelect");
+
+                const vehicleIdInput = document.getElementById("journalVehicleIdInput");
+
+                if (vehicleSelect && vehicleIdInput) {
+
+                    vehicleSelect.innerHTML = '<option value="">-- Нове авто / не вибрано --</option>';
+
+                    vehicleSelect.disabled = true;
+
+                    vehicleIdInput.value = "";
+
+                }
+
+
+
+                return;
+
+            }
+
+
+
+            const filtered = journalAllClients.filter(c => {
+
+                const name = (c.name || "").toLowerCase();
+
+                const phone = (c.phone || "").toLowerCase();
+
+                return name.includes(query) || phone.includes(query);
+
+            });
+
+
+
+            clientResults.innerHTML = "";
+
+
+
+            if (!filtered.length) {
+
+                const noRes = document.createElement("div");
+
+                noRes.className = "list-group-item text-muted";
+
+                noRes.textContent = "Клієнтів не знайдено";
+
+                clientResults.appendChild(noRes);
+
+            } else {
+
+                filtered.forEach(c => {
+
+                    const item = document.createElement("button");
+
+                    item.type = "button";
+
+                    item.className = "list-group-item list-group-item-action";
+
+                    item.textContent = `${c.name} (${c.phone || "-"})`;
+
+                    item.onclick = (e) => {
+
+                        e.preventDefault();
+
+                        clientNameInput.value = c.name;
+
+                        if (clientPhoneInput) {
+
+                            clientPhoneInput.value = c.phone || "";
+
+                        }
+
+                        clientIdInput.value = c.id;
+
+                        clientResults.style.display = "none";
+
+                        clientResults.innerHTML = "";
+
+
+
+                        populateJournalVehiclesForClient(c);
+
+                    };
+
+                    clientResults.appendChild(item);
+
+                });
+
+            }
+
+
+
+            clientResults.style.display = "block";
+
+        });
+
+
+
+        document.addEventListener("click", (e) => {
+
+            if (!clientNameInput.contains(e.target) && !clientResults.contains(e.target)) {
+
+                clientResults.style.display = "none";
+
+            }
+
+        });
+
+    }
+
+
+
+    // Обработчик закрытия модального окна редактирования комментария
+
+    const editCommentModalEl = document.getElementById("editCommentModal");
+
+    if (editCommentModalEl) {
+
+        editCommentModalEl.addEventListener("hidden.bs.modal", () => {
+
+            const errorDiv = document.getElementById("editCommentFormError");
+
+            const newCommentInput = document.getElementById("editNewCommentInput");
+
+            const currentCommentDiv = document.getElementById("editCurrentComment");
+
+            if (errorDiv) {
+
+                errorDiv.style.display = "none";
+
+                errorDiv.textContent = "";
+
+            }
+
+            if (newCommentInput) {
+
+                newCommentInput.value = "";
+
+                newCommentInput.classList.remove("is-invalid");
+
+            }
+
+            if (currentCommentDiv) {
+
+                currentCommentDiv.innerHTML = "";
+
+            }
+
+        });
+
+    }
+
+    loadJournals();
+
+});
+
+</script>
+
+{% endblock %}
+

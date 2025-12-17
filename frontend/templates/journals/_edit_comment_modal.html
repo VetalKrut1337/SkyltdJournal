@@ -1,0 +1,40 @@
+<div class="modal fade" id="editCommentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0">Доповнити коментар</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div id="editCommentFormError" class="alert alert-danger" style="display:none"></div>
+
+                <input type="hidden" id="editJournalIdInput" value="">
+
+                <div id="editCurrentComment" class="mb-3">
+                    <!-- Тут буде показано поточний коментар -->
+                </div>
+
+                <div class="mb-3">
+                    <label for="editNewCommentInput" class="form-label">
+                        <strong>Нове доповнення:</strong>
+                    </label>
+                    <textarea id="editNewCommentInput"
+                              class="form-control"
+                              rows="4"
+                              placeholder="Введіть нове доповнення до коментаря..."></textarea>
+                    <div class="form-text">
+                        Це доповнення буде додано до існуючого коментаря з датою та часом. Старий коментар не можна редагувати або видаляти.
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-primary" id="saveCommentBtn" onclick="updateJournalComment()">
+                    Зберегти
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

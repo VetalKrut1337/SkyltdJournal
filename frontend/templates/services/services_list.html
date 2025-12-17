@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+{% block title %}Послуги{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Послуги</h2>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <input id="searchInput" type="text" class="form-control" placeholder="Пошук по назві послуги...">
+    </div>
+
+    <div class="col-md-4">
+        <select id="sortSelect" class="form-select">
+            <option value="">Сортувати...</option>
+            <option value="name">Назва (A→Z)</option>
+            <option value="-name">Назва (Z→A)</option>
+        </select>
+    </div>
+
+    <div class="col-md-4 text-end">
+        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#createServiceModal">
+            Додати сервіс
+        </button>
+        <button class="btn btn-primary" onclick="loadServices()">
+            Оновити список
+        </button>
+    </div>
+</div>
+
+<div id="loadingSpinner" class="text-center py-5" style="display: none;">
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Завантаження...</span>
+    </div>
+</div>
+
+<table class="table table-bordered table-striped" id="servicesTable" style="display: none;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Назва послуги</th>
+            <th>Активність</th>
+            <th>Дії</th>
+        </tr>
+    </thead>
+    <tbody id="servicesBody">
+        <!-- Дані будуть завантажені через API -->
+    </tbody>
+</table>
+
+<div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+
+{% include "services/_create_service_modal.html" %}
+{% include "services/_edit_service_modal.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allServices = [];
+
+// Функция для получения CSRF токена из cookie
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function loadServices() {
+    const spinner = document.getElementById("loadingSpinner");
+    const table = document.getElementById("servicesTable");
+    const errorMsg = document.getElementById("errorMessage");
+    const body = document.getElementById("servicesBody");
+
+    // Показуємо спіннер, ховаємо таблицю та повідомлення про помилку
+    spinner.style.display = "block";
+    table.style.display = "none";
+    errorMsg.style.display = "none";
+
+    fetch("/api/services/", {
+        credentials: 'include'
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            allServices = data.results || [];
+            renderServices(allServices);
+            
+            spinner.style.display = "none";
+            table.style.display = "table";
+        })
+        .catch(error => {
+            console.error("Помилка завантаження сервісів:", error);
+            errorMsg.textContent = `Помилка завантаження даних: ${error.message}`;
+            errorMsg.style.display = "block";
+            spinner.style.display = "none";
+        });
+}
+
+function renderServices(services) {
+    const body = document.getElementById("servicesBody");
+    body.innerHTML = "";
+
+    if (services.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" class="text-center">Сервіси не знайдено</td></tr>';
+        return;
+    }
+
+    services.forEach(service => {
+        const row = document.createElement("tr");
+        const isActive = service.is_active !== false; // По умолчанию true
+        const activeBadge = isActive 
+            ? '<span class="badge bg-success">Активна</span>' 
+            : '<span class="badge bg-secondary">Неактивна</span>';
+        
+        row.innerHTML = `
+            <td>${service.id}</td>
+            <td>${service.name}</td>
+            <td>${activeBadge}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" onclick="editService(${service.id})">
+                    Редагувати
+                </button>
+            </td>
+        `;
+        body.appendChild(row);
+    });
+}
+
+function createService() {
+    const nameInput = document.getElementById("serviceNameInput");
+    const errorDiv = document.getElementById("serviceFormError");
+    const saveBtn = document.getElementById("saveServiceBtn");
+    const name = nameInput.value.trim();
+
+    // Очищаем предыдущие ошибки
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+    nameInput.classList.remove("is-invalid");
+
+    // Валидация на клиенте
+    if (!name) {
+        nameInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть назву послуги";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Проверка на уникальность (на клиенте)
+    const existingService = allServices.find(s => s.name.toLowerCase() === name.toLowerCase());
+    if (existingService) {
+        nameInput.classList.add("is-invalid");
+        errorDiv.textContent = "Послуга з такою назвою вже існує";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Блокируем кнопку
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Збереження...";
+
+    // Получаем CSRF токен
+    const csrftoken = getCookie('csrftoken');
+
+    // Отправка через API
+    fetch("/api/services/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name: name, is_active: true })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Успешно создан
+        const modal = bootstrap.Modal.getInstance(document.getElementById("createServiceModal"));
+        modal.hide();
+        
+        // Очищаем форму
+        nameInput.value = "";
+        nameInput.classList.remove("is-invalid");
+        errorDiv.style.display = "none";
+        
+        // Перезагружаем список
+        loadServices();
+    })
+    .catch(error => {
+        console.error("Помилка створення сервісу:", error);
+        
+        // Показываем ошибку
+        let errorMessage = "Помилка при створенні сервісу";
+        
+        if (error.name && Array.isArray(error.name)) {
+            errorMessage = error.name.join(", ");
+        } else if (error.name) {
+            errorMessage = error.name;
+        } else if (error.detail) {
+            errorMessage = error.detail;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        // Проверяем на уникальность (ошибка от сервера)
+        if (errorMessage.toLowerCase().includes("unique") || errorMessage.toLowerCase().includes("вже існує") || errorMessage.toLowerCase().includes("already exists")) {
+            nameInput.classList.add("is-invalid");
+            errorDiv.textContent = "Послуга з такою назвою вже існує";
+        } else {
+            errorDiv.textContent = errorMessage;
+        }
+        
+        errorDiv.style.display = "block";
+    })
+    .finally(() => {
+        // Разблокируем кнопку
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Зберегти";
+    });
+}
+
+function editService(serviceId) {
+    // Находим услугу в загруженном списке
+    const service = allServices.find(s => s.id === serviceId);
+    if (!service) {
+        alert("Помилка: послугу не знайдено");
+        return;
+    }
+
+    // Заполняем форму
+    document.getElementById("editServiceId").value = service.id;
+    document.getElementById("editServiceNameInput").value = service.name;
+    document.getElementById("editServiceIsActiveInput").checked = service.is_active !== false;
+
+    // Очищаем ошибки
+    document.getElementById("editServiceFormError").style.display = "none";
+    document.getElementById("editServiceNameInput").classList.remove("is-invalid");
+
+    // Открываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById("editServiceModal"));
+    modal.show();
+}
+
+function updateService() {
+    const serviceId = document.getElementById("editServiceId").value;
+    const nameInput = document.getElementById("editServiceNameInput");
+    const isActiveInput = document.getElementById("editServiceIsActiveInput");
+    const errorDiv = document.getElementById("editServiceFormError");
+    const updateBtn = document.getElementById("updateServiceBtn");
+    const name = nameInput.value.trim();
+    const isActive = isActiveInput.checked;
+
+    // Очищаем предыдущие ошибки
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+    nameInput.classList.remove("is-invalid");
+
+    // Валидация на клиенте
+    if (!name) {
+        nameInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть назву послуги";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Проверка на уникальность (на клиенте, исключая текущую услугу)
+    const existingService = allServices.find(s => 
+        s.id !== parseInt(serviceId) && s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existingService) {
+        nameInput.classList.add("is-invalid");
+        errorDiv.textContent = "Послуга з такою назвою вже існує";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Блокируем кнопку
+    updateBtn.disabled = true;
+    updateBtn.textContent = "Збереження...";
+
+    // Получаем CSRF токен
+    const csrftoken = getCookie('csrftoken');
+
+    // Отправка через API (PATCH для частичного обновления)
+    fetch(`/api/services/${serviceId}/`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name: name, is_active: isActive })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Успешно обновлено
+        const modal = bootstrap.Modal.getInstance(document.getElementById("editServiceModal"));
+        modal.hide();
+        
+        // Очищаем форму
+        nameInput.value = "";
+        nameInput.classList.remove("is-invalid");
+        errorDiv.style.display = "none";
+        
+        // Перезагружаем список
+        loadServices();
+    })
+    .catch(error => {
+        console.error("Помилка оновлення сервісу:", error);
+        
+        // Показываем ошибку
+        let errorMessage = "Помилка при оновленні сервісу";
+        
+        if (error.name && Array.isArray(error.name)) {
+            errorMessage = error.name.join(", ");
+        } else if (error.name) {
+            errorMessage = error.name;
+        } else if (error.detail) {
+            errorMessage = error.detail;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        // Проверяем на уникальность (ошибка от сервера)
+        if (errorMessage.toLowerCase().includes("unique") || errorMessage.toLowerCase().includes("вже існує") || errorMessage.toLowerCase().includes("already exists")) {
+            nameInput.classList.add("is-invalid");
+            errorDiv.textContent = "Послуга з такою назвою вже існує";
+        } else {
+            errorDiv.textContent = errorMessage;
+        }
+        
+        errorDiv.style.display = "block";
+    })
+    .finally(() => {
+        // Разблокируем кнопку
+        updateBtn.disabled = false;
+        updateBtn.textContent = "Зберегти";
+    });
+}
+
+// Обработка закрытия модального окна - очистка формы
+document.addEventListener("DOMContentLoaded", () => {
+    const modal = document.getElementById("createServiceModal");
+    modal.addEventListener("hidden.bs.modal", function() {
+        document.getElementById("serviceNameInput").value = "";
+        document.getElementById("serviceNameInput").classList.remove("is-invalid");
+        document.getElementById("serviceFormError").style.display = "none";
+        document.getElementById("serviceFormError").textContent = "";
+    });
+
+    // Обработка Enter для отправки формы создания
+    document.getElementById("serviceNameInput").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            createService();
+        }
+    });
+
+    // Обработка Enter для отправки формы редактирования
+    const editNameInput = document.getElementById("editServiceNameInput");
+    if (editNameInput) {
+        editNameInput.addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                updateService();
+            }
+        });
+    }
+
+    // Обработка закрытия модального окна редактирования
+    const editModal = document.getElementById("editServiceModal");
+    if (editModal) {
+        editModal.addEventListener("hidden.bs.modal", function() {
+            document.getElementById("editServiceNameInput").value = "";
+            document.getElementById("editServiceNameInput").classList.remove("is-invalid");
+            document.getElementById("editServiceIsActiveInput").checked = true;
+            document.getElementById("editServiceFormError").style.display = "none";
+            document.getElementById("editServiceFormError").textContent = "";
+            document.getElementById("editServiceId").value = "";
+        });
+    }
+
+    // Загрузка при завантаженні сторінки
+    loadServices();
+
+    // Пошук
+    document.getElementById("searchInput").addEventListener("keyup", function() {
+        const value = this.value.toLowerCase();
+        const filtered = allServices.filter(service => 
+            service.name.toLowerCase().includes(value)
+        );
+        renderServices(filtered);
+    });
+
+    // Сортування
+    document.getElementById("sortSelect").addEventListener("change", function() {
+        const field = this.value;
+        if (!field) {
+            renderServices(allServices);
+            return;
+        }
+
+        const sorted = [...allServices];
+        const isDesc = field.startsWith("-");
+        const sortField = isDesc ? field.substring(1) : field;
+
+        sorted.sort((a, b) => {
+            const aVal = a[sortField] || "";
+            const bVal = b[sortField] || "";
+            const comparison = aVal.localeCompare(bVal);
+            return isDesc ? -comparison : comparison;
+        });
+
+        renderServices(sorted);
+    });
+});
+</script>
+{% endblock %}
+
