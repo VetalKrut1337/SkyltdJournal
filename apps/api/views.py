@@ -302,6 +302,19 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
     serializer_class = JournalRecordSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_header(self):
+        local_tz = pytz.timezone('Europe/Kiev')
+        now = timezone.now()
+        if timezone.is_aware(now):
+            local_now = now.astimezone(local_tz)
+        else:
+            local_now = local_tz.localize(now)
+
+        username = self.request.user.username
+        date_str = local_now.strftime("%d.%m.%Y %H:%M")
+        header = f"[ADD][{username}][{date_str}]"
+        return header
+
     # ------------------------------------
     # ФИЛЬТРАЦИЯ ДЛЯ /journal/?department=
     # ------------------------------------
@@ -463,6 +476,15 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
         service_ids = [int(sid) for sid in service_ids if sid]
 
         # ---------------------------
+        # 7.5 Добавление header к комментарию при создании
+        # ---------------------------
+        comment = data.get("comment", "").strip()
+        if comment:
+            header = self.get_header()
+
+            data["comment"] = f"{header}\n{comment}"
+
+        # ---------------------------
         # 8. Создание записи журнала
         # ---------------------------
         serializer = self.get_serializer(data=data)
@@ -496,18 +518,7 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
                 status=400
             )
 
-        
-        # Получаем локальное время (Europe/Kiev)
-        local_tz = pytz.timezone('Europe/Kiev')
-        now = timezone.now()
-        if timezone.is_aware(now):
-            local_now = now.astimezone(local_tz)
-        else:
-            local_now = local_tz.localize(now)
-
-        username = request.user.username
-        date_str = local_now.strftime("%d.%m.%Y %H:%M")
-        header = f"[ADD][{username}][{date_str}]"
+        header = self.get_header()
 
 
         # Если комментарий уже существует, добавляем новое дополнение

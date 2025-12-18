@@ -387,7 +387,9 @@ function formatComment(comment) {
     let html = "";
     let buffer = [];
 
-    lines.forEach(line => {
+    lines.forEach(rawLine => {
+        const line = rawLine.trim();
+
         const match = line.match(/^\[ADD]\[(.+?)]\[(.+?)]$/);
 
         if (match) {
