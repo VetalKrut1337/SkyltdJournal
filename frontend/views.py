@@ -63,50 +63,6 @@ def journal_list(request):
 def services_list(request):
     return render(request, "services/services_list.html")
 
-# def journal_list(request):
-#     tab = request.GET.get("tab", "sales")
-#     search = request.GET.get("search", "")
-#     order = request.GET.get("order", "-date")
-#
-#     journals = (
-#         JournalRecord.objects
-#         .filter(department=tab)
-#         .select_related("client", "vehicle", "service")
-#     )
-#
-#     if search:
-#         journals = journals.filter(
-#             Q(client__name__icontains=search) |
-#             Q(phone__icontains=search) |
-#             Q(comment__icontains=search)
-#         )
-#
-#     journals = journals.order_by(order)
-#
-#     vehicles_qs = Vehicle.objects.select_related("client")
-#     vehicles_by_client = {}
-#     for v in vehicles_qs:
-#         if not v.client_id:
-#             continue
-#         vehicles_by_client.setdefault(v.client_id, []).append({
-#             "id": v.id,
-#             "plate": v.plate_number,
-#             "brand": v.brand,
-#             "model": v.model,
-#         })
-#
-#     return render(request, "journals/journal_list.html", {
-#         "tab": tab,
-#         "journals": journals,
-#         "clients": Client.objects.all(),
-#         "vehicles": vehicles_qs,
-#         "vehicles_by_client": json.dumps(vehicles_by_client),
-#         "services": Service.objects.filter(is_active=True),
-#         "search": search,
-#         "order": order,
-#     })
-
-
 def journal_create(request):
     if request.method != "POST":
         return redirect("journal_list")

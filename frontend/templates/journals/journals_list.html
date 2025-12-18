@@ -375,89 +375,46 @@ function formatDate(dateStr) {
 }
 
 function formatComment(comment) {
-
     if (!comment) return "-";
 
-    // Экранируем HTML для безопасности (кроме уже существующих тегов от бэкенда)
-
     const escapeHtml = (text) => {
-
         const div = document.createElement("div");
-
         div.textContent = text;
-
         return div.innerHTML;
-
     };
 
-
-
-    // Разбиваем по двойным переносам строк (дополнения идут после пустой строки)
-
-    const parts = comment.split(/\n\n/);
-
-    if (parts.length === 1) {
-
-        // Нет дополнений, проверяем есть ли HTML теги
-
-        if (parts[0].includes("<strong>")) {
-
-            // Уже есть HTML от бэкенда, просто заменяем переносы строк
-
-            return parts[0].replace(/\n/g, "<br>");
-
-        }
-
-        // Просто текст, экранируем и заменяем переносы
-
-        return escapeHtml(parts[0]).replace(/\n/g, "<br>");
-
-    }
-
-    // Есть дополнения, форматируем их компактно
-
+    const lines = comment.split("\n");
     let html = "";
+    let buffer = [];
 
-    // Первая часть (оригинальный комментарий)
+    lines.forEach(line => {
+        const match = line.match(/^\[ADD]\[(.+?)]\[(.+?)]$/);
 
-    if (parts[0]) {
+        if (match) {
+            // если был предыдущий текст — выводим его
+            if (buffer.length) {
+                html += `<div>${escapeHtml(buffer.join("\n")).replace(/\n/g, "<br>")}</div>`;
+                buffer = [];
+            }
 
-        html = escapeHtml(parts[0]).replace(/\n/g, "<br>");
+            const user = escapeHtml(match[1]);
+            const date = escapeHtml(match[2]);
 
-    }
-
-    // Обрабатываем дополнения (без разделителей, просто новая строка)
-
-    for (let i = 1; i < parts.length; i++) {
-
-        const part = parts[i];
-
-        // Проверяем, есть ли метка "Доповнення від" с HTML тегами
-
-        if (part.includes("<strong>Доповнення від")) {
-
-            // HTML теги уже есть от бэкенда
-
-            const lines = part.split("\n");
-
-            const header = lines[0]; // Содержит <strong>Доповнення від...</strong>
-
-            const content = lines.slice(1).join("\n");
-
-            html += `<br><div class="text-muted small mt-2">${header}</div><div>${escapeHtml(content).replace(/\n/g, "<br>")}</div>`;
-
+            html += `
+                <div class="mt-2 text-muted small">
+                    <strong>${user}</strong> • ${date}
+                </div>
+            `;
         } else {
-
-            // Обычный текст, экранируем
-
-            html += `<br><div>${escapeHtml(part).replace(/\n/g, "<br>")}</div>`;
-
+            buffer.push(line);
         }
+    });
 
+    if (buffer.length) {
+        html += `<div>${escapeHtml(buffer.join("\n")).replace(/\n/g, "<br>")}</div>`;
     }
 
     return html;
-
 }
 
 

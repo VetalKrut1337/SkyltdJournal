@@ -504,15 +504,17 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
             local_now = now.astimezone(local_tz)
         else:
             local_now = local_tz.localize(now)
-        
+
+        username = request.user.username
         date_str = local_now.strftime("%d.%m.%Y %H:%M")
+        header = f"[ADD][{username}][{date_str}]"
+
 
         # Если комментарий уже существует, добавляем новое дополнение
         if instance.comment:
-            # Без разделителя, просто новая строка
-            updated_comment = f"{instance.comment}\n\n<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
+            updated_comment = f"{instance.comment}\n\n{header}\n{new_comment}"
         else:
-            updated_comment = f"<strong>Доповнення від {date_str}:</strong>\n{new_comment}"
+            updated_comment = f"{header}\n{new_comment}"
 
         # Обновляем только комментарий
         instance.comment = updated_comment

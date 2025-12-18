@@ -3,6 +3,8 @@ from rest_framework import generics, permissions
 from rest_framework.serializers import ModelSerializer
 
 from apps.accounts.models import User
+from apps.api.serializers import JournalRecordSerializer
+from apps.models import JournalRecord
 
 
 class UserCreateSerializer(ModelSerializer):
@@ -20,3 +22,4 @@ class UserCreateView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
     permission_classes = [permissions.DjangoModelPermissions]
+
