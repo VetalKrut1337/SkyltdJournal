@@ -444,8 +444,10 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
         # ---------------------------
         brand = data.pop("brand", None)
         model = data.pop("model", None)
+        plate_number = data.pop("plate_number", '-')
+        department = data.get("department")
 
-        if not vehicle and plate_number:
+        if not vehicle and department=='service':
             if not brand or not model:
                 return Response(
                     {"error": "Для створення нового авто потрібно brand і model"},
@@ -537,6 +539,7 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         """PATCH запросы тоже обрабатываем через update"""
         return self.update(request, *args, **kwargs)
+
 
 class UserCreateViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

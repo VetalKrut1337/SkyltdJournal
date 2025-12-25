@@ -59,6 +59,7 @@ class JournalRecordSerializer(serializers.ModelSerializer):
             'id',
             'date',
             'department',
+            'is_priority',
             'client',
             'phone',
             'vehicle',

@@ -60,6 +60,12 @@ class JournalRecord(models.Model):
         verbose_name="Дата та час",
         auto_now_add=True
     )
+
+    is_priority = models.BooleanField(
+        default=False,
+        verbose_name="Пріоритет"
+    )
+
     department = models.CharField(
         max_length=20,
         choices=DEPARTMENT_CHOICES,
@@ -103,6 +109,6 @@ class JournalRecord(models.Model):
         return f"{self.get_department_display()} — {self.date}"
 
     class Meta:
-        ordering = ["-date"]
+        ordering = ["-is_priority", "-date"]
         verbose_name = "Запис журналу"
         verbose_name_plural = "Записи журналу"
