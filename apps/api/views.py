@@ -540,6 +540,22 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
         """PATCH запросы тоже обрабатываем через update"""
         return self.update(request, *args, **kwargs)
 
+    @extend_schema(
+        summary="Перемикання пріоритету запису",
+        description="Змінює статус is_priority на протилежний (True <-> False).",
+        request=None,
+        responses=JournalRecordSerializer
+    )
+    @action(detail=True, methods=['post'], url_path='toggle-priority')
+    def toggle_priority(self, request, pk=None):
+        instance = self.get_object()
+        # Инвертируем значение
+        instance.is_priority = not instance.is_priority
+        # Сохраняем только это поле для оптимизации
+        instance.save(update_fields=['is_priority'])
+
+        return Response(self.get_serializer(instance).data)
+
 
 class UserCreateViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
