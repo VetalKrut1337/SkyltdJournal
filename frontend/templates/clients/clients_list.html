@@ -42,6 +42,7 @@
             <th>Ім'я</th>
             <th>Телефон</th>
             <th>Машини</th>
+            <th>Дії</th>
         </tr>
     </thead>
     <tbody id="clientsBody">
@@ -52,6 +53,7 @@
 <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
 
 {% include "clients/_create_client_modal.html" %}
+{% include "clients/_edit_client_modal.html" %}
 
 {% endblock %}
 
@@ -114,7 +116,7 @@ function renderClients(clients) {
     body.innerHTML = "";
 
     if (clients.length === 0) {
-        body.innerHTML = '<tr><td colspan="3" class="text-center">Клієнтів не знайдено</td></tr>';
+        body.innerHTML = '<tr><td colspan="4" class="text-center">Клієнтів не знайдено</td></tr>';
         return;
     }
 
@@ -132,6 +134,11 @@ function renderClients(clients) {
             <td>${client.name || ''}</td>
             <td>${client.phone || ''}</td>
             <td>${vehiclesHtml}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" onclick="openEditClientModal(${client.id})">
+                    Редагувати
+                </button>
+            </td>
         `;
         body.appendChild(row);
     });
@@ -236,6 +243,153 @@ function createClient() {
     });
 }
 
+function openEditClientModal(clientId) {
+    // Находим клиента в массиве
+    const client = allClients.find(c => c.id === clientId);
+    if (!client) {
+        console.error("Клієнт не знайдено");
+        return;
+    }
+
+    // Заполняем форму данными клиента
+    document.getElementById("editClientId").value = client.id;
+    document.getElementById("editClientNameInput").value = client.name || '';
+    document.getElementById("editClientPhoneInput").value = client.phone || '';
+
+    // Отображаем текущие машины
+    const currentVehiclesDiv = document.getElementById("editClientCurrentVehicles");
+    if (client.vehicles && client.vehicles.length > 0) {
+        currentVehiclesDiv.innerHTML = client.vehicles.map(v => 
+            `<span class="badge bg-primary me-1 mb-1">${v.plate_number || ''} (${v.brand || ''} ${v.model || ''})</span>`
+        ).join('');
+    } else {
+        currentVehiclesDiv.innerHTML = '<i class="text-muted">немає машин</i>';
+    }
+
+    // Очищаем ошибки
+    document.getElementById("editClientFormError").style.display = "none";
+    document.getElementById("editClientFormError").textContent = "";
+    document.getElementById("editClientNameInput").classList.remove("is-invalid");
+    document.getElementById("editClientPhoneInput").classList.remove("is-invalid");
+
+    // Загружаем свободные машины
+    const vehicleSelect = document.getElementById("editClientVehicleSelect");
+    fetch("/api/vehicles/free/", {
+        credentials: 'include'
+    })
+    .then(response => response.json())
+    .then(data => {
+        vehicleSelect.innerHTML = '<option value="">-- Не вибрано --</option>';
+        if (data && data.length > 0) {
+            data.forEach(vehicle => {
+                const option = document.createElement("option");
+                option.value = vehicle.id;
+                option.textContent = `${vehicle.plate_number || ''} (${vehicle.brand || ''} ${vehicle.model || ''})`;
+                vehicleSelect.appendChild(option);
+            });
+        }
+    })
+    .catch(error => {
+        console.error("Помилка завантаження вільних машин:", error);
+    });
+
+    // Открываем модальное окно
+    const modal = new bootstrap.Modal(document.getElementById("editClientModal"));
+    modal.show();
+}
+
+function updateClient() {
+    const clientId = document.getElementById("editClientId").value;
+    const nameInput = document.getElementById("editClientNameInput");
+    const phoneInput = document.getElementById("editClientPhoneInput");
+    const vehicleSelect = document.getElementById("editClientVehicleSelect");
+    const errorDiv = document.getElementById("editClientFormError");
+    const saveBtn = document.getElementById("saveEditClientBtn");
+    
+    const name = nameInput.value.trim();
+    const phone = phoneInput.value.trim();
+    const selectedVehicleIds = Array.from(vehicleSelect.selectedOptions)
+        .map(option => option.value)
+        .filter(id => id);
+
+    // Очищаем предыдущие ошибки
+    errorDiv.style.display = "none";
+    errorDiv.textContent = "";
+    nameInput.classList.remove("is-invalid");
+    phoneInput.classList.remove("is-invalid");
+
+    // Валидация
+    if (!name) {
+        nameInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть ім'я клієнта";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    if (!phone) {
+        phoneInput.classList.add("is-invalid");
+        errorDiv.textContent = "Будь ласка, введіть телефон";
+        errorDiv.style.display = "block";
+        return;
+    }
+
+    // Блокируем кнопку
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Збереження...";
+
+    // Получаем CSRF токен
+    const csrftoken = getCookie('csrftoken');
+
+    // Отправка через API
+    fetch(`/api/clients/${clientId}/`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+            name: name,
+            phone: phone,
+            vehicle_ids: selectedVehicleIds
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Успешно обновлен
+        const modal = bootstrap.Modal.getInstance(document.getElementById("editClientModal"));
+        modal.hide();
+        
+        // Перезагружаем список
+        loadClients();
+    })
+    .catch(error => {
+        console.error("Помилка оновлення клієнта:", error);
+        
+        let errorMessage = "Помилка при оновленні клієнта";
+        
+        if (error.error) {
+            errorMessage = error.error;
+        } else if (error.detail) {
+            errorMessage = error.detail;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        errorDiv.textContent = errorMessage;
+        errorDiv.style.display = "block";
+    })
+    .finally(() => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Зберегти";
+    });
+}
+
 // Завантаження при завантаженні сторінки
 document.addEventListener("DOMContentLoaded", () => {
     loadClients();
@@ -301,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Обработка закрытия модального окна
+    // Обработка закрытия модального окна создания
     if (createModal) {
         createModal.addEventListener("hidden.bs.modal", function() {
             document.getElementById("clientNameInput").value = "";
@@ -311,6 +465,22 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("clientPhoneInput").classList.remove("is-invalid");
             document.getElementById("clientFormError").style.display = "none";
             document.getElementById("clientFormError").textContent = "";
+        });
+    }
+
+    // Обработка закрытия модального окна редактирования
+    const editModal = document.getElementById("editClientModal");
+    if (editModal) {
+        editModal.addEventListener("hidden.bs.modal", function() {
+            document.getElementById("editClientId").value = "";
+            document.getElementById("editClientNameInput").value = "";
+            document.getElementById("editClientPhoneInput").value = "";
+            document.getElementById("editClientVehicleSelect").innerHTML = '<option value="">-- Не вибрано --</option>';
+            document.getElementById("editClientCurrentVehicles").innerHTML = "";
+            document.getElementById("editClientNameInput").classList.remove("is-invalid");
+            document.getElementById("editClientPhoneInput").classList.remove("is-invalid");
+            document.getElementById("editClientFormError").style.display = "none";
+            document.getElementById("editClientFormError").textContent = "";
         });
     }
 });

@@ -50,8 +50,52 @@ class ClientViewSet(viewsets.ModelViewSet):
         if vehicle_ids:
             Vehicle.objects.filter(id__in=vehicle_ids).update(client=client)
         
+        # Перезагружаем клиента с обновленными данными о машинах через queryset
+        client = self.get_queryset().get(pk=client.pk)
+        
         # Возвращаем клиента с обновленными данными
         return Response(ClientSerializer(client).data, status=201)
+
+    def update(self, request, *args, **kwargs):
+        """Переопределяем update для обработки редактирования клиента и привязки машин"""
+        instance = self.get_object()
+        data = request.data.copy()
+        
+        # Получаем vehicle_ids из данных (может быть список)
+        vehicle_ids = data.pop('vehicle_ids', [])
+        if isinstance(vehicle_ids, str):
+            # Если пришла строка, пытаемся распарсить как JSON
+            import json
+            try:
+                vehicle_ids = json.loads(vehicle_ids)
+            except:
+                vehicle_ids = [vehicle_ids] if vehicle_ids else []
+        elif not isinstance(vehicle_ids, list):
+            vehicle_ids = []
+        
+        # Преобразуем в числа
+        vehicle_ids = [int(vid) for vid in vehicle_ids if vid]
+        
+        # Обновляем данные клиента
+        serializer = self.get_serializer(instance, data=data, partial=kwargs.get('partial', False))
+        serializer.is_valid(raise_exception=True)
+        client = serializer.save()
+        
+        # Привязываем новые машины к клиенту (только те, которые не имеют владельца)
+        if vehicle_ids:
+            free_vehicles = Vehicle.objects.filter(id__in=vehicle_ids, client__isnull=True)
+            free_vehicles.update(client=client)
+        
+        # Перезагружаем клиента с обновленными данными о машинах через queryset
+        client = self.get_queryset().get(pk=client.pk)
+        
+        # Возвращаем клиента с обновленными данными
+        return Response(ClientSerializer(client).data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """PATCH запросы тоже обрабатываем через update"""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
     @extend_schema(
         summary="Автопошук клієнта за ім'ям (з можливим створенням)",
@@ -289,6 +333,48 @@ class VehicleViewSet(viewsets.ModelViewSet):
             )
 
         return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        """Переопределяем update для обработки редактирования машины и привязки к клиенту"""
+        instance = self.get_object()
+        data = request.data.copy()
+        
+        # Получаем client_id из данных
+        client_id = data.pop('client_id', None)
+        
+        # Если машина уже прикреплена к клиенту, не изменяем клиента
+        if instance.client:
+            # Оставляем текущего клиента, client_id не должен меняться
+            pass
+        # Если машина не прикреплена, можно прикрепить к клиенту
+        elif client_id:
+            try:
+                client = Client.objects.get(id=client_id)
+                data['client_id'] = client_id
+            except Client.DoesNotExist:
+                return Response(
+                    {"error": "Клієнт не знайдено"},
+                    status=400
+                )
+        # Если машина не прикреплена и client_id не передан, оставляем без клиента
+        else:
+            pass
+        
+        # Обновляем данные машины
+        serializer = self.get_serializer(instance, data=data, partial=kwargs.get('partial', False))
+        serializer.is_valid(raise_exception=True)
+        vehicle = serializer.save()
+        
+        # Перезагружаем машину с обновленными данными через queryset
+        vehicle = self.get_queryset().get(pk=vehicle.pk)
+        
+        # Возвращаем машину с обновленными данными
+        return Response(VehicleSerializer(vehicle).data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """PATCH запросы тоже обрабатываем через update"""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
 
 class ServiceViewSet(viewsets.ModelViewSet):

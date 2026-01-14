@@ -1,0 +1,53 @@
+<!-- Модальное окно для редактирования клиента -->
+<div class="modal fade" id="editClientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редагувати клієнта</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="editClientFormError" class="alert alert-danger" style="display: none;"></div>
+                
+                <input type="hidden" id="editClientId">
+                
+                <div class="mb-3">
+                    <label for="editClientNameInput" class="form-label">Ім'я</label>
+                    <input type="text" class="form-control" id="editClientNameInput" placeholder="Введіть ім'я клієнта" required>
+                    <div class="invalid-feedback">
+                        Будь ласка, введіть ім'я клієнта
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="editClientPhoneInput" class="form-label">Телефон</label>
+                    <input type="text" class="form-control" id="editClientPhoneInput" placeholder="Введіть телефон" required>
+                    <div class="invalid-feedback">
+                        Будь ласка, введіть телефон
+                    </div>
+                </div>
+
+                <hr>
+
+                <div class="mb-3">
+                    <label class="form-label">Поточні машини</label>
+                    <div id="editClientCurrentVehicles" class="mb-2">
+                        <!-- Текущие машины будут загружены через JavaScript -->
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="editClientVehicleSelect" class="form-label">Додати машину (без власника)</label>
+                    <select id="editClientVehicleSelect" class="form-select" multiple size="5">
+                        <option value="">-- Не вибрано --</option>
+                    </select>
+                    <small class="text-muted">Можна вибрати кілька машин, утримуючи Ctrl (або Cmd на Mac)</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+                <button type="button" class="btn btn-primary" id="saveEditClientBtn" onclick="updateClient()">Зберегти</button>
+            </div>
+        </div>
+    </div>
+</div>
