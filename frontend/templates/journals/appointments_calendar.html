@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Календарь записей{% endblock %}
+
+{% block content %}
+{% include "journals/appointments_calendar/_intro.html" %}
+{% include "journals/appointments_calendar/_calendar_container.html" %}
+{% include "journals/appointments_calendar/_appointment_modal.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+{% include "journals/appointments_calendar/_scripts.html" %}
+{% endblock %}
+

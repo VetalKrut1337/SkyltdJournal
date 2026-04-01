@@ -1,0 +1,1153 @@
+<!-- FullCalendar CSS и JS с CDN (глобальная сборка, как в демо) -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const calendarEl = document.getElementById("calendar");
+        let calendarSlotMinutes = 15;
+
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            // Внешний вид как в демо
+            initialView: "timeGridWeek",
+            locale: "ru",
+            buttonText: {
+                today: "Сегодня",
+                month: "Месяц",
+                week: "Неделя",
+                day: "День"
+            },
+            views: {
+                timeGridWeek: {
+                    slotEventOverlap: false
+                },
+                timeGridDay: {
+                    slotEventOverlap: false
+                }
+            },
+            {#slotDuration: `00:${String(calendarSlotMinutes).padStart(2, "0")}:00`,#}
+            {#slotLabelInterval: `00:${String(calendarSlotMinutes).padStart(2, "0")}:00`,#}
+            {#snapDuration: `00:${String(calendarSlotMinutes).padStart(2, "0")}:00`,#}
+            firstDay: 1,
+            slotMinTime: "08:00:00",
+            slotMaxTime: "21:00:00",
+            allDaySlot: false,
+            nowIndicator: true,
+            height: 800,
+            headerToolbar: {
+                left: "prev,next today",
+                center: "title",
+                right: "dayGridMonth,timeGridWeek,timeGridDay"
+            },
+            selectable: true,
+            selectMirror: true,
+            nowIndicator: true,
+
+            events: function (info, successCallback, failureCallback) {
+                const start = info.start.toISOString();
+                const end = info.end.toISOString();
+
+                fetch(`/api/appointments/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, {
+                    credentials: "include"
+                })
+                    .then(response => {
+                        if (!response.ok) throw new Error("Помилка завантаження записів");
+                        return response.json();
+                    })
+                    .then(data => {
+                        const results = Array.isArray(data) ? data : (data.results || []);
+                        const events = results.map(item => {
+                            const startDate = item.start_time;
+                            // Кінець рахуємо на фронті по duration_minutes
+                            let endDate = null;
+                            if (item.duration_minutes && startDate) {
+                                const d = new Date(startDate);
+                                d.setMinutes(d.getMinutes() + item.duration_minutes);
+                                endDate = d.toISOString();
+                            }
+
+                            const formatTime = (dateValue) => {
+                                if (!dateValue) return "--:--";
+                                const d = new Date(dateValue);
+                                if (Number.isNaN(d.getTime())) return "--:--";
+                                const h = String(d.getHours()).padStart(2, "0");
+                                const m = String(d.getMinutes()).padStart(2, "0");
+                                return `${h}:${m}`;
+                            };
+
+                            const fromTime = formatTime(startDate);
+                            const toTime = formatTime(endDate);
+                            const timeRange = `${fromTime}-${toTime}`;
+
+                            const plate = item.vehicle && item.vehicle.plate_number ? item.vehicle.plate_number : "";
+                            const clientName = item.client && item.client.name ? item.client.name : "—";
+                            const services = Array.isArray(item.services) ? item.services.map(s => s.name).filter(Boolean) : [];
+                            const servicesText = services.length ? services.join(", ") : "—";
+                            const serviceOne = services.length ? services[0] : "—";
+
+                            const mechanics = Array.isArray(item.users)
+                                ? item.users.map(u => {
+                                    const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+                                    return full || u.username || `#${u.id}`;
+                                })
+                                : [];
+                            const mechanicsText = mechanics.length ? mechanics.join(", ") : "—";
+
+                            const monthTitle = plate ? `${fromTime} ${plate}` : `${fromTime}`;
+                            const weekTitle = `${timeRange} | ${plate || "—"} | ${serviceOne}`;
+                            const dayTitle = `${timeRange} | ${clientName} | ${plate || "—"} | ${servicesText} | Механик(и): ${mechanicsText}`;
+
+                            const tooltipText = [
+                                `Время: ${timeRange}`,
+                                `Клиент: ${clientName}`,
+                                `Машина: ${plate || "—"}`,
+                                `Услуги: ${servicesText}`,
+                                `Механик(и): ${mechanicsText}`,
+                            ].join("\n");
+
+                            // Цвет события в зависимости от статуса
+                            let bgColor = "#0d6efd";      // по умолчанию синий
+                            let borderColor = "#0d6efd";
+                            if (item.status === "pending") {
+                                bgColor = "#6c757d";     // серый
+                                borderColor = "#6c757d";
+                            } else if (item.status === "in_progress") {
+                                bgColor = "#0d6efd";     // синий
+                                borderColor = "#0d6efd";
+                            } else if (item.status === "done") {
+                                bgColor = "#198754";     // зелёный
+                                borderColor = "#198754";
+                            } else if (item.status === "partially_done") {
+                                bgColor = "#fd7e14";     // оранжевый
+                                borderColor = "#fd7e14";
+                            } else if (item.status === "canceled") {
+                                bgColor = "#dc3545";     // красный
+                                borderColor = "#dc3545";
+                            }
+
+                            return {
+                                id: item.id,
+                                title: weekTitle,
+                                start: startDate,
+                                end: endDate,
+                                backgroundColor: bgColor,
+                                borderColor: borderColor,
+                                extendedProps: {
+                                    monthTitle: monthTitle,
+                                    weekTitle: weekTitle,
+                                    dayTitle: dayTitle,
+                                    tooltipText: tooltipText,
+                                }
+                            };
+                        });
+                        successCallback(events);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        failureCallback(err);
+                    });
+            },
+
+            eventContent: function (arg) {
+                const viewType = arg.view ? arg.view.type : "";
+                const props = arg.event.extendedProps || {};
+
+                const time = (props.weekTitle || "").split("|")[0] || "";
+                const plate = (props.weekTitle || "").split("|")[1] || "";
+                const service = (props.weekTitle || "").split("|")[2] || "";
+
+                const full = props.dayTitle || "";
+
+                const wrapper = document.createElement("div");
+                wrapper.className = "fc-event-custom";
+
+                if (viewType === "timeGridDay") {
+                    wrapper.classList.add("fc-day-view"); // 👈 ключ
+                }
+
+                const timeEl = document.createElement("div");
+                timeEl.className = "fc-event-time";
+                timeEl.innerHTML = `⏰ ${time}`;
+
+                const titleEl = document.createElement("div");
+                titleEl.className = "fc-event-title";
+
+                const detailsEl = document.createElement("div");
+                detailsEl.className = "fc-event-details";
+
+                if (viewType === "timeGridWeek") {
+                    titleEl.innerHTML = `🚗 ${plate || "—"}`;
+                    detailsEl.innerHTML = `🔧 ${service || ""}`;
+                } else if (viewType === "timeGridDay") {
+                    titleEl.innerHTML = `🚗 ${plate || "—"}`;
+                    const parts = full.split("|").map(s => s.trim());
+
+                    // ❗ убираем время (0) и номер машины (2)
+                    const filtered = parts.filter((_, index) => index !== 0 && index !== 2);
+
+                    detailsEl.innerHTML = filtered
+                        .map((part, index) => {
+                            if (index === 0) return `👤 ${part}`;       // клиент
+                            if (index === 1) return `🔧 ${part}`;       // услуги
+                            if (part.includes("Механик")) return part.replace("Механик(и):", "👨‍🔧");
+                            return part;
+                        })
+                        .join(" • ");
+                } else {
+                    titleEl.innerHTML = `🚗 ${plate || ""}`;
+                }
+
+                wrapper.appendChild(timeEl);
+                wrapper.appendChild(titleEl);
+                wrapper.appendChild(detailsEl);
+
+                return {domNodes: [wrapper]};
+            },
+
+            eventDidMount: function (arg) {
+                const tooltipText = arg.event.extendedProps ? arg.event.extendedProps.tooltipText : "";
+                arg.el.title = tooltipText || arg.event.title || "";
+            },
+
+            // Клик по пустому месту / выделение интервала — создаём новую запись
+            dateClick: function (info) {
+                openAppointmentModal(info.date);
+            },
+
+            select: function (info) {
+                openAppointmentModal(info.start);
+            },
+
+            // Клик по существующему событию: редактирование
+            eventClick: function (info) {
+                const ev = info.event;
+                const id = ev.id;
+                if (!id) return;
+
+                errorDiv.style.display = "none";
+                errorDiv.textContent = "";
+
+                editingId = id;
+                deleteBtn.classList.remove("d-none");
+                markDoneBtn.classList.remove("d-none");
+                startInput.disabled = true;
+                durationInput.disabled = true;
+
+                const loadClientsPromise = fetch("/api/clients/", {credentials: "include"})
+                    .then(r => r.json())
+                    .then(data => {
+                        allClients = data.results || [];
+                    });
+
+                const loadVehiclesPromise = fetch("/api/vehicles/", {credentials: "include"})
+                    .then(r => r.json())
+                    .then(data => {
+                        allVehicles = data.results || [];
+                    });
+
+                const loadServicesPromise = fetch("/api/services/", {credentials: "include"})
+                    .then(r => r.json())
+                    .then(data => {
+                        allServices = data.results || [];
+                    });
+
+                const loadUsersPromise = fetch("/api/users/", {credentials: "include"})
+                    .then(r => r.json())
+                    .then(data => {
+                        allUsers = data.results || data || [];
+                    });
+
+                const loadAppointmentPromise = fetch(`/api/appointments/${id}/`, {credentials: "include"})
+                    .then(r => r.json());
+
+                Promise.all([loadClientsPromise, loadVehiclesPromise, loadServicesPromise, loadUsersPromise, loadAppointmentPromise])
+                    .then(([_, __, ___, ____, appointment]) => {
+                        const readonlyStatuses = new Set(["done", "partially_done", "canceled"]);
+                        if (appointment && readonlyStatuses.has(appointment.status)) {
+                            // В этих статусах редактирование запрещено — открываем просмотр
+                            openAppointmentViewModal(appointment);
+                            return;
+                        }
+
+                        // Заполняем форму данными записи
+                        if (appointment.start_time) {
+                            startInput.value = toLocalInputValue(appointment.start_time);
+                        }
+                        durationInput.value = appointment.duration_minutes || 60;
+                        descriptionInput.value = appointment.description || "";
+                        statusSelect.value = appointment.status || "pending";
+
+                        // Сотрудники: теперь это массив объектов
+                        selectedUserIds = Array.isArray(appointment.users)
+                            ? appointment.users.map(u => u.id)
+                            : [];
+                        renderUsersSelected();
+
+                        // Клиент + машина
+                        if (appointment.client) {
+                            selectClient(appointment.client);
+                        }
+                        if (appointment.vehicle) {
+                            selectVehicle(appointment.vehicle);
+                        }
+
+                        // Услуги
+                        selectedServiceIds.clear();
+                        (appointment.services || []).forEach(s => {
+                            selectedServiceIds.add(parseInt(s.id, 10));
+                        });
+                        renderServicesOptions(servicesSearchInput.value);
+
+                        appointmentModal.show();
+                    })
+                    .catch(err => {
+                        console.error("Ошибка загрузки записи:", err);
+                        alert("Не удалось загрузить запись для редактирования.");
+                    });
+            },
+        });
+
+        calendar.render();
+
+        const appointmentModalEl = document.getElementById("appointmentModal");
+        const appointmentModal = new bootstrap.Modal(appointmentModalEl);
+        const appointmentViewModalEl = document.getElementById("appointmentViewModal");
+        const appointmentViewModal = new bootstrap.Modal(appointmentViewModalEl);
+        const startInput = document.getElementById("appointmentStart");
+        const durationInput = document.getElementById("appointmentDuration");
+        const clientSearchInput = document.getElementById("appointmentClientSearch");
+        const clientIdInput = document.getElementById("appointmentClientId");
+        const clientDropdown = document.getElementById("appointmentClientDropdown");
+        const vehicleSearchInput = document.getElementById("appointmentVehicleSearch");
+        const vehicleIdInput = document.getElementById("appointmentVehicleId");
+        const vehicleDropdown = document.getElementById("appointmentVehicleDropdown");
+        const usersSearchInput = document.getElementById("appointmentUsersSearch");
+        const usersDropdown = document.getElementById("appointmentUsersDropdown");
+        const usersSelectedEl = document.getElementById("appointmentUsersSelected");
+        const servicesSelect = document.getElementById("appointmentServices");
+        const servicesSearchInput = document.getElementById("appointmentServicesSearch");
+        const descriptionInput = document.getElementById("appointmentDescription");
+        const statusSelect = document.getElementById("appointmentStatus");
+        const errorDiv = document.getElementById("appointmentFormError");
+        const saveBtn = document.getElementById("saveAppointmentBtn");
+        const deleteBtn = document.getElementById("deleteAppointmentBtn");
+        const markDoneBtn = document.getElementById("markDoneBtn");
+
+        // --- Новая машина ---
+        const toggleNewVehicleBtn = document.getElementById("toggleNewVehicleBtn");
+        const newVehicleBlock = document.getElementById("newVehicleBlock");
+        const newVehiclePlate = document.getElementById("newVehiclePlate");
+        const newVehicleBrand = document.getElementById("newVehicleBrand");
+        const newVehicleModel = document.getElementById("newVehicleModel");
+
+        toggleNewVehicleBtn.addEventListener("click", () => {
+            const isVisible = newVehicleBlock.style.display !== "none";
+            if (isVisible) {
+                newVehicleBlock.style.display = "none";
+                toggleNewVehicleBtn.textContent = "+ Создать новую машину";
+                // Сбрасываем поля и возвращаем поиск
+                newVehiclePlate.value = "";
+                newVehicleBrand.value = "";
+                newVehicleModel.value = "";
+                appointmentVehicleSearch.disabled = false;
+            } else {
+                newVehicleBlock.style.display = "block";
+                toggleNewVehicleBtn.textContent = "✕ Отменить создание";
+                // Сбрасываем выбранную машину и блокируем поиск
+                vehicleIdInput.value = "";
+                appointmentVehicleSearch.value = "";
+                appointmentVehicleSearch.disabled = true;
+                hideVehicleDropdown();
+            }
+        });
+
+        const toggleNewClientBtn = document.getElementById("toggleNewClientBtn");
+        const newClientBlock = document.getElementById("newClientBlock");
+        const newClientName = document.getElementById("newClientName");
+        const newClientPhone = document.getElementById("newClientPhone");
+
+        toggleNewClientBtn.addEventListener("click", () => {
+            const isVisible = newClientBlock.style.display !== "none";
+            if (isVisible) {
+                newClientBlock.style.display = "none";
+                toggleNewClientBtn.textContent = "+ Создать нового клиента";
+                newClientName.value = "";
+                newClientPhone.value = "";
+                appointmentClientSearch.disabled = false;
+            } else {
+                newClientBlock.style.display = "block";
+                toggleNewClientBtn.textContent = "✕ Отменить создание";
+                // Сбрасываем выбранного клиента и блокируем поиск
+                clientIdInput.value = "";
+                appointmentClientSearch.value = "";
+                appointmentClientSearch.disabled = true;
+                hideClientDropdown();
+            }
+        });
+
+        const viewStartTimeEl = document.getElementById("viewStartTime");
+        const viewDurationEl = document.getElementById("viewDuration");
+        const viewStatusEl = document.getElementById("viewStatus");
+        const viewUsersEl = document.getElementById("viewUsers");
+        const viewClientEl = document.getElementById("viewClient");
+        const viewVehicleEl = document.getElementById("viewVehicle");
+        const viewServicesEl = document.getElementById("viewServices");
+        const viewDescriptionEl = document.getElementById("viewDescription");
+
+        let editingId = null;  // null = создание, число = редактирование существующей записи
+
+        let allClients = [];
+        let allVehicles = [];
+
+        function getClientLabel(client) {
+            if (!client) return "";
+            const phone = client.phone ? client.phone : "-";
+            return `${client.name} (${phone})`;
+        }
+
+        function getVehicleLabel(vehicle) {
+            if (!vehicle) return "";
+            const plate = vehicle.plate_number || "";
+            const brand = vehicle.brand || "";
+            const model = vehicle.model || "";
+            const clientName = vehicle.client && vehicle.client.name ? ` — ${vehicle.client.name}` : "";
+            return `${plate} (${brand} ${model})${clientName}`.trim();
+        }
+
+        function hideClientDropdown() {
+            if (!clientDropdown) return;
+            clientDropdown.style.display = "none";
+            clientDropdown.innerHTML = "";
+        }
+
+        function hideVehicleDropdown() {
+            if (!vehicleDropdown) return;
+            vehicleDropdown.style.display = "none";
+            vehicleDropdown.innerHTML = "";
+        }
+
+        function selectClient(client) {
+            if (!client) return;
+            clientIdInput.value = client.id;
+            clientSearchInput.value = getClientLabel(client);
+
+            hideClientDropdown();
+            // Если машина уже выбрана и она не принадлежит этому клиенту — сбросим её.
+            if (vehicleIdInput.value) {
+                const currentVehicle = allVehicles.find(v => String(v.id) === String(vehicleIdInput.value));
+                const currentClientId = currentVehicle && currentVehicle.client ? currentVehicle.client.id : null;
+                if (currentClientId && String(currentClientId) !== String(client.id)) {
+                    vehicleIdInput.value = "";
+                    vehicleSearchInput.value = "";
+                    hideVehicleDropdown();
+                }
+            }
+        }
+
+        function selectVehicle(vehicle) {
+            if (!vehicle) return;
+            vehicleIdInput.value = vehicle.id;
+            vehicleSearchInput.value = getVehicleLabel(vehicle);
+            hideVehicleDropdown();
+
+            // Если клиент не выбран — подставим из машины
+            if (vehicle.client && (!clientIdInput.value || String(clientIdInput.value) !== String(vehicle.client.id))) {
+                clientIdInput.value = vehicle.client.id;
+                clientSearchInput.value = getClientLabel(vehicle.client);
+            }
+        }
+
+        // ----------------------------
+        // Пользователи (2 штуки) + услуги
+        // ----------------------------
+        let allUsers = [];
+        let selectedUserIds = [];
+
+        let allServices = [];
+        let selectedServiceIds = new Set();
+
+        function getUserLabel(user) {
+            if (!user) return "";
+            const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+            const base = fullName || user.username || `#${user.id}`;
+            return user.position ? `${base} (${user.position})` : base;
+        }
+
+        function hideUsersDropdown() {
+            if (!usersDropdown) return;
+            usersDropdown.style.display = "none";
+            usersDropdown.innerHTML = "";
+        }
+
+        function findUserById(id) {
+            if (!id) return null;
+            return allUsers.find(u => String(u.id) === String(id)) || null;
+        }
+
+        function renderUsersSelected() {
+            if (!usersSelectedEl) return;
+            usersSelectedEl.innerHTML = "";
+
+            selectedUserIds.forEach(uid => {
+                const user = findUserById(uid);
+                const label = getUserLabel(user) || `#${uid}`;
+
+                const badge = document.createElement("span");
+                badge.className = "badge bg-primary me-1 mb-1";
+                badge.textContent = label;
+
+                const removeBtn = document.createElement("button");
+                removeBtn.type = "button";
+                removeBtn.className = "btn-close btn-close-white btn-sm ms-2";
+                removeBtn.setAttribute("aria-label", "Remove");
+                removeBtn.dataset.userId = uid;
+                removeBtn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectedUserIds = selectedUserIds.filter(x => String(x) !== String(uid));
+                    renderUsersSelected();
+                });
+
+                badge.appendChild(removeBtn);
+                usersSelectedEl.appendChild(badge);
+            });
+        }
+
+        function selectUser(user) {
+            if (!user) return;
+            const uid = user.id;
+            if (selectedUserIds.some(id => String(id) === String(uid))) return;
+            // Убрали проверку на максимум 2
+            // if (selectedUserIds.length >= 2) return;
+            selectedUserIds.push(uid);
+            renderUsersSelected();
+            usersSearchInput.value = "";
+            hideUsersDropdown();
+        }
+
+        function renderUsersDropdown(filterText = "") {
+            if (!usersDropdown) return;
+            usersDropdown.innerHTML = "";
+
+            const q = (filterText || "").trim().toLowerCase();
+            const notSelected = selectedUserIds.map(String);
+
+            const results = allUsers
+                .filter(u => !notSelected.includes(String(u.id)))
+                .filter(u => {
+                    if (!q) return true;
+                    const name = getUserLabel(u).toLowerCase();
+                    return name.includes(q);
+                })
+                .slice(0, 10);
+
+            if (!results.length) {
+                hideUsersDropdown();
+                return;
+            }
+
+            results.forEach(u => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "list-group-item list-group-item-action";
+                btn.textContent = getUserLabel(u);
+                btn.addEventListener("click", () => selectUser(u));
+                usersDropdown.appendChild(btn);
+            });
+
+            usersDropdown.style.display = "block";
+        }
+
+        function renderServicesOptions(filterText = "") {
+            if (!servicesSelect) return;
+            servicesSelect.innerHTML = "";
+
+            const q = (filterText || "").trim().toLowerCase();
+            const keepSelected = selectedServiceIds;
+
+            allServices
+                .filter(s => {
+                    const matches = !q || (s.name || "").toLowerCase().includes(q);
+                    return matches || keepSelected.has(s.id);
+                })
+                .forEach(s => {
+                    const opt = document.createElement("option");
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    opt.selected = keepSelected.has(s.id);
+                    servicesSelect.appendChild(opt);
+                });
+        }
+
+        function renderClientDropdown(filterText = "") {
+            if (!clientDropdown) return;
+            const q = (filterText || "").trim().toLowerCase();
+            clientDropdown.innerHTML = "";
+
+            const results = allClients
+                .filter(c => {
+                    if (!q) return true;
+                    const name = (c.name || "").toLowerCase();
+                    const phone = (c.phone || "").toLowerCase();
+                    return name.includes(q) || phone.includes(q);
+                })
+                .slice(0, 10);
+
+            if (!results.length) {
+                hideClientDropdown();
+                return;
+            }
+
+            results.forEach(c => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "list-group-item list-group-item-action";
+                btn.textContent = getClientLabel(c);
+                btn.addEventListener("click", () => {
+                    selectClient(c);
+                });
+                clientDropdown.appendChild(btn);
+            });
+
+            clientDropdown.style.display = "block";
+        }
+
+        function renderVehicleDropdown(filterText = "") {
+            if (!vehicleDropdown) return;
+            const clientId = clientIdInput.value || null;
+
+            const q = (filterText || "").trim().toLowerCase();
+            vehicleDropdown.innerHTML = "";
+
+            const results = allVehicles
+                .filter(v => {
+                    // Если клиент выбран — показываем в приоритете машины этого клиента,
+                    // но не блокируем поиск по всем машинам (можно начать с машины).
+                    // Фильтр по клиенту применяем ТОЛЬКО если строка поиска пустая.
+                    if (clientId && !q) {
+                        if (!v.client || String(v.client.id) !== String(clientId)) return false;
+                    }
+                    if (!q) return true;
+                    const plate = (v.plate_number || "").toLowerCase();
+                    const brand = (v.brand || "").toLowerCase();
+                    const model = (v.model || "").toLowerCase();
+                    return plate.includes(q) || brand.includes(q) || model.includes(q);
+                })
+                .slice(0, 10);
+
+            if (!results.length) {
+                hideVehicleDropdown();
+                return;
+            }
+
+            results.forEach(v => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "list-group-item list-group-item-action";
+                btn.textContent = getVehicleLabel(v);
+                btn.addEventListener("click", () => {
+                    selectVehicle(v);
+                });
+                vehicleDropdown.appendChild(btn);
+            });
+
+            vehicleDropdown.style.display = "block";
+        }
+
+        function loadClients() {
+            fetch("/api/clients/", {credentials: "include"})
+                .then(r => r.json())
+                .then(data => {
+                    allClients = data.results || [];
+                });
+        }
+
+        function loadVehicles() {
+            fetch("/api/vehicles/", {credentials: "include"})
+                .then(r => r.json())
+                .then(data => {
+                    allVehicles = data.results || [];
+                });
+        }
+
+        function loadUsers() {
+            fetch("/api/users/", {credentials: "include"})
+                .then(r => r.json())
+                .then(data => {
+                    allUsers = data.results || data || [];
+                    renderUsersSelected();
+                });
+        }
+
+        function loadServices() {
+            fetch("/api/services/", {credentials: "include"})
+                .then(r => r.json())
+                .then(data => {
+                    allServices = (data.results || []).filter(s => s.is_active !== false);
+                    renderServicesOptions(servicesSearchInput.value);
+                });
+        }
+
+        function toLocalInputValue(date) {
+            const d = new Date(date);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        function formatLocalDateTime(date) {
+            if (!date) return "";
+            const d = new Date(date);
+            if (Number.isNaN(d.getTime())) return String(date);
+            return d.toLocaleString("ru-RU", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+        }
+
+        function getStatusLabel(status) {
+            const map = {
+                pending: "Ожидает",
+                in_progress: "В работе",
+                done: "Готово",
+                partially_done: "Частично выполнено",
+                canceled: "Отменено",
+            };
+            return map[status] || status || "-";
+        }
+
+        function openAppointmentViewModal(appointment) {
+            if (!appointment) return;
+
+            viewStartTimeEl.textContent = formatLocalDateTime(appointment.start_time);
+            viewDurationEl.textContent = `${appointment.duration_minutes || "-"} мин`;
+            viewStatusEl.textContent = getStatusLabel(appointment.status);
+
+            const users = Array.isArray(appointment.users)
+                ? appointment.users.map(u => {
+                    const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+                    return full || u.username || `#${u.id}`;
+                })
+                : [];
+            viewUsersEl.textContent = users.length ? users.join(", ") : "-";
+
+            viewClientEl.textContent = appointment.client ? getClientLabel(appointment.client) : "-";
+            viewVehicleEl.textContent = appointment.vehicle ? getVehicleLabel(appointment.vehicle) : "-";
+
+            const services = (appointment.services || []).map(s => s.name).filter(Boolean);
+            viewServicesEl.textContent = services.length ? services.join(", ") : "-";
+
+            viewDescriptionEl.textContent = (appointment.description || "").trim() || "-";
+
+            appointmentViewModal.show();
+        }
+
+        function openAppointmentModal(date) {
+            errorDiv.style.display = "none";
+            errorDiv.textContent = "";
+
+            editingId = null;
+            deleteBtn.classList.add("d-none");
+            markDoneBtn.classList.add("d-none");
+
+            startInput.disabled = false;
+            durationInput.disabled = false;
+
+            startInput.value = toLocalInputValue(date);
+            durationInput.value = durationInput.value || 60;
+            descriptionInput.value = "";
+            statusSelect.value = "pending";
+
+            // Пользователи (2)
+            selectedUserIds = [];
+            renderUsersSelected();
+            usersSearchInput.value = "";
+            hideUsersDropdown();
+
+            // Клиент (autocomplete + hidden id)
+            clientIdInput.value = "";
+            clientSearchInput.value = "";
+            hideClientDropdown();
+
+            // Машина (зависит от клиента)
+            vehicleIdInput.value = "";
+            vehicleSearchInput.value = "";
+            hideVehicleDropdown();
+
+            // Сброс блока новой машины
+            newVehicleBlock.style.display = "none";
+            toggleNewVehicleBtn.textContent = "+ Создать новую машину";
+            newVehiclePlate.value = "";
+            newVehicleBrand.value = "";
+            newVehicleModel.value = "";
+            appointmentVehicleSearch.disabled = false;
+
+            // Сброс блока нового клиента
+            newClientBlock.style.display = "none";
+            toggleNewClientBtn.textContent = "+ Создать нового клиента";
+            newClientName.value = "";
+            newClientPhone.value = "";
+            appointmentClientSearch.disabled = false;
+
+            // Услуги (multi + поиск)
+            if (servicesSearchInput) servicesSearchInput.value = "";
+            selectedServiceIds.clear();
+            renderServicesOptions(servicesSearchInput ? servicesSearchInput.value : "");
+
+            loadClients();
+            loadVehicles();
+            loadUsers();
+            loadServices();
+
+            appointmentModal.show();
+        }
+
+        saveBtn.addEventListener("click", function () {
+            errorDiv.style.display = "none";
+            errorDiv.textContent = "";
+
+            const startValue = startInput.value;
+            const duration = parseInt(durationInput.value || "0", 10);
+            const clientId = clientIdInput.value;
+            const vehicleId = vehicleIdInput.value;
+            const selectedServices = Array.from(selectedServiceIds);
+            const selectedUsers = selectedUserIds.map(id => parseInt(id, 10));
+            const description = descriptionInput.value.trim();
+            const status = statusSelect.value;
+
+            const csrftoken = getCookie("csrftoken");
+
+            // Режим создания
+            if (!editingId) {
+                if (selectedUsers.length < 1) {
+                    errorDiv.textContent = "Пожалуйста, выберите хотя бы одного сотрудника.";
+                    errorDiv.style.display = "block";
+                    return;
+                }
+                if (!startValue || !duration) {
+                    errorDiv.textContent = "Пожалуйста, заполните дату, длительность, клиента и автомобиль.";
+                    errorDiv.style.display = "block";
+                    return;
+                }
+
+                // Определяем — выбрана существующая машина или создаём новую
+                const isNewVehicle = newVehicleBlock.style.display !== "none";
+
+                if (!isNewVehicle && !vehicleId) {
+                    errorDiv.textContent = "Пожалуйста, выберите автомобиль или создайте новый.";
+                    errorDiv.style.display = "block";
+                    return;
+                }
+
+                if (isNewVehicle) {
+                    const brand = newVehicleBrand.value.trim();
+                    const model = newVehicleModel.value.trim();
+                    if (!brand || !model) {
+                        errorDiv.textContent = "Для новой машины обязательно укажите бренд и модель.";
+                        errorDiv.style.display = "block";
+                        return;
+                    }
+                }
+
+                const payload = {
+                    start_time: new Date(startValue).toISOString(),
+                    duration_minutes: duration,
+                    user_ids: selectedUsers,
+                    service_ids: selectedServices,
+                    description: description,
+                    status: status || "pending",
+                };
+
+                if (clientId) {
+                    payload.client_id = parseInt(clientId, 10);
+                }
+
+                if (isNewVehicle) {
+                    payload.plate_number = newVehiclePlate.value.trim();
+                    payload.brand = newVehicleBrand.value.trim();
+                    payload.model = newVehicleModel.value.trim();
+                } else {
+                    payload.vehicle_id = parseInt(vehicleId, 10);
+                }
+
+                const isNewClient = newClientBlock.style.display !== "none";
+
+                if (isNewClient) {
+                    payload.client_name = newClientName.value.trim();
+                    payload.client_phone = newClientPhone.value.trim();
+                } else if (clientId) {
+                    payload.client_id = parseInt(clientId, 10);
+                }
+
+// если ни то ни другое — клиент не указан, это допустимо
+
+                function sendCreate(force = false) {
+                    const body = {...payload};
+                    if (force) {
+                        body.force = true;
+                    }
+
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = "Сохранение...";
+
+                    fetch("/api/appointments/", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": csrftoken
+                        },
+                        credentials: "include",
+                        body: JSON.stringify(body)
+                    })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(err => Promise.reject({
+                                    status: response.status,
+                                    data: err
+                                }));
+                            }
+                            return response.json();
+                        })
+                        .then(() => {
+                            appointmentModal.hide();
+                            calendar.refetchEvents();
+                        })
+                        .catch(err => {
+                            console.error("Ошибка создания записи:", err);
+                            if (err.data && err.data.has_conflicts) {
+                                const count = Array.isArray(err.data.conflicts) ? err.data.conflicts.length : 0;
+                                const baseMsg = err.data.message || "Обнаружены пересечения с другими записями. Всё равно создать?";
+                                const confirmText = count
+                                    ? `${baseMsg}\nКоличество конфликтующих записей: ${count}.`
+                                    : baseMsg;
+                                if (confirm(confirmText)) {
+                                    sendCreate(true);
+                                    return;
+                                }
+                            } else {
+                                let msg = "Ошибка при создании записи";
+                                if (err.data && (err.data.detail || err.data.message)) {
+                                    msg = err.data.detail || err.data.message;
+                                }
+                                errorDiv.textContent = msg;
+                                errorDiv.style.display = "block";
+                            }
+                        })
+                        .finally(() => {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "Сохранить";
+                        });
+                }
+
+                sendCreate(false);
+                return;
+            }
+
+            // Режим редактирования: меняем услуги, статус и комментарий
+            if (selectedUsers.length < 1) {
+                errorDiv.textContent = "Пожалуйста, выберите хотя бы одного сотрудника.";
+                errorDiv.style.display = "block";
+                return;
+            }
+            const updatePayload = {
+                service_ids: selectedServices,
+                user_ids: selectedUsers,
+                description: description,
+                status: status || "pending",
+            };
+            if (clientId) {
+                updatePayload.client_id = parseInt(clientId, 10);
+            }
+
+            if (vehicleId) {
+                updatePayload.vehicle_id = parseInt(vehicleId, 10);
+            }
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Сохранение...";
+
+            fetch(`/api/appointments/${editingId}/`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+                credentials: "include",
+                body: JSON.stringify(updatePayload)
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => Promise.reject({status: response.status, data: err}));
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    appointmentModal.hide();
+                    calendar.refetchEvents();
+                })
+                .catch(err => {
+                    console.error("Ошибка обновления записи:", err);
+                    let msg = "Ошибка при обновлении записи";
+                    if (err.data && (err.data.detail || err.data.message)) {
+                        msg = err.data.detail || err.data.message;
+                    }
+                    errorDiv.textContent = msg;
+                    errorDiv.style.display = "block";
+                })
+                .finally(() => {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = "Сохранить";
+                });
+        });
+
+        // Быстро поставить статус "Готово"
+        markDoneBtn.addEventListener("click", () => {
+            if (!editingId) return;
+            const csrftoken = getCookie("csrftoken");
+
+            markDoneBtn.disabled = true;
+            const prevText = markDoneBtn.textContent;
+            markDoneBtn.textContent = "Сохранение...";
+
+            fetch(`/api/appointments/${editingId}/`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+                credentials: "include",
+                body: JSON.stringify({status: "done"})
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => Promise.reject({status: response.status, data: err}));
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    appointmentModal.hide();
+                    calendar.refetchEvents();
+                })
+                .catch(err => {
+                    console.error("Ошибка установки статуса done:", err);
+                    let msg = "Не удалось поставить статус «Готово»";
+                    if (err.data && (err.data.detail || err.data.message)) {
+                        msg = err.data.detail || err.data.message;
+                    }
+                    errorDiv.textContent = msg;
+                    errorDiv.style.display = "block";
+                })
+                .finally(() => {
+                    markDoneBtn.disabled = false;
+                    markDoneBtn.textContent = prevText;
+                });
+        });
+
+        // Закрытие выпадающих списков при клике вне полей
+        const usersWrap = usersSearchInput ? usersSearchInput.parentElement : null;
+        const clientWrap = clientSearchInput ? clientSearchInput.parentElement : null;
+        const vehicleWrap = vehicleSearchInput ? vehicleSearchInput.parentElement : null;
+        document.addEventListener("click", (e) => {
+            const target = e.target;
+            if (usersWrap && !usersWrap.contains(target)) hideUsersDropdown();
+            if (clientWrap && !clientWrap.contains(target)) hideClientDropdown();
+            if (vehicleWrap && !vehicleWrap.contains(target)) hideVehicleDropdown();
+        });
+
+        // Пользователи (2) - поиск + выбор
+        usersSearchInput.addEventListener("input", () => {
+            renderUsersDropdown(usersSearchInput.value);
+        });
+        usersSearchInput.addEventListener("focus", () => {
+            renderUsersDropdown(usersSearchInput.value);
+        });
+
+        // Клиент - поиск + выбор
+        clientSearchInput.addEventListener("input", () => {
+            renderClientDropdown(clientSearchInput.value);
+        });
+        clientSearchInput.addEventListener("focus", () => {
+            renderClientDropdown(clientSearchInput.value);
+        });
+
+        // Машина - поиск + выбор (можно начать с машины)
+        vehicleSearchInput.addEventListener("input", () => {
+            renderVehicleDropdown(vehicleSearchInput.value);
+        });
+        vehicleSearchInput.addEventListener("focus", () => {
+            renderVehicleDropdown(vehicleSearchInput.value);
+        });
+
+        // Услуги - поиск + multi-select
+        if (servicesSearchInput) {
+            servicesSearchInput.addEventListener("input", () => {
+                renderServicesOptions(servicesSearchInput.value);
+            });
+        }
+
+        servicesSelect.addEventListener("change", () => {
+            selectedServiceIds.clear();
+            Array.from(servicesSelect.selectedOptions).forEach(o => {
+                selectedServiceIds.add(parseInt(o.value, 10));
+            });
+        });
+
+        // Удаление записи
+        deleteBtn.addEventListener("click", () => {
+            if (!editingId) return;
+            if (!confirm("Вы действительно хотите удалить эту запись?")) {
+                return;
+            }
+            const csrftokenDel = getCookie("csrftoken");
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = "Удаление...";
+
+            fetch(`/api/appointments/${editingId}/`, {
+                method: "DELETE",
+                headers: {
+                    "X-CSRFToken": csrftokenDel
+                },
+                credentials: "include"
+            })
+                .then(response => {
+                    if (!response.ok && response.status !== 204) {
+                        return response.text().then(t => Promise.reject(t || "Ошибка удаления"));
+                    }
+                })
+                .then(() => {
+                    appointmentModal.hide();
+                    calendar.refetchEvents();
+                })
+                .catch(err => {
+                    console.error("Ошибка удаления записи:", err);
+                    alert("Не удалось удалить запись. Попробуйте позже.");
+                })
+                .finally(() => {
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = "Удалить запись";
+                });
+        });
+    });
+</script>
+

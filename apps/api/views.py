@@ -9,11 +9,12 @@ from rest_framework.response import Response
 from django.utils import timezone
 import pytz
 
-from apps.models import Client, Vehicle, Service, JournalRecord
+from apps.models import Client, Vehicle, Service, JournalRecord, Appointment
 from apps.accounts.models import User
 from .serializers import (
     ClientSerializer, VehicleSerializer,
-    ServiceSerializer, JournalRecordSerializer, UserSerializer
+    ServiceSerializer, JournalRecordSerializer, UserSerializer,
+    AppointmentSerializer,
 )
 
 
@@ -646,7 +647,168 @@ class JournalRecordViewSet(viewsets.ModelViewSet):
 class UserCreateViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        # На календаре нужно выбирать всех пользователей кроме суперадминов.
+        return User.objects.filter(is_superuser=False)
+
+    def get_permissions(self):
+        # Чтение (list/retrieve) доступно всем авторизованным.
+        # Создание/редактирование/удаление — только админам.
+        if self.action in ["list", "retrieve"]:
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAdminUser()]
+
+
+class AppointmentViewSet(viewsets.ModelViewSet):
+    """
+    Записи на сервіс (календар).
+    """
+    queryset = Appointment.objects.select_related("client", "vehicle").prefetch_related("users", "services")
+    serializer_class = AppointmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+
+        # Фильтрация по интервалу дат (для календаря)
+        start = self.request.query_params.get("start")
+        end = self.request.query_params.get("end")
+
+        from django.utils.dateparse import parse_datetime
+
+        if start and end:
+            start_dt = parse_datetime(start)
+            end_dt = parse_datetime(end)
+            if start_dt and end_dt:
+                # Пересечение интервалов по времени
+                # [existing_start, existing_end) пересекается с [start_dt, end_dt)
+                from datetime import timedelta
+                # end_time считается как start_time + duration_minutes
+                qs = qs.filter(
+                    start_time__lt=end_dt,
+                    start_time__gte=start_dt - timedelta(days=1),  # лёгкий буфер
+                )
+
+        return qs.order_by("start_time")
+
+    def perform_create(self, serializer):
+        """
+        При создании проверяем пересечения по времени для того же авто.
+        Если есть пересечения и не передан флаг force=true — возвращаем 400 с информацией.
+        """
+        from datetime import timedelta
+        data = serializer.validated_data
+        start_time = data["start_time"]
+        duration = data["duration_minutes"]
+
+        end_time = start_time + timedelta(minutes=duration)
+
+        request = self.request
+        force = str(request.data.get("force", "")).lower() in ("1", "true", "yes")
+
+        # После вызова create() client и vehicle мы подставляем в сериализаторе,
+        # поэтому для поиска конфликтов нужно отдельно получить объекты по id из request.data.
+        client_id = request.data.get("client_id")
+        vehicle_id = request.data.get("vehicle_id")
+
+        vehicle = None
+        if vehicle_id:
+            try:
+                vehicle = Vehicle.objects.get(pk=vehicle_id)
+            except Vehicle.DoesNotExist:
+                raise ValidationError({"vehicle_id": "Автомобиль не найден"})
+
+        # Фильтруем только по одному ресурсу (машина). Можно расширить и на клієнта/менеджера.
+        conflict_qs = Appointment.objects.all()
+        if vehicle:
+            conflict_qs = conflict_qs.filter(vehicle=vehicle)
+
+        # Условие пересечения интервалов
+        conflict_qs = conflict_qs.filter(
+            start_time__lt=end_time,
+            start_time__gt=start_time - timedelta(days=1),  # простой буфер
+        )
+
+        if conflict_qs.exists() and not force:
+            conflicts = AppointmentSerializer(conflict_qs, many=True).data
+            raise ValidationError({
+                "has_conflicts": True,
+                "conflicts": conflicts,
+                "message": "Существуют другие записи, которые пересекаются по времени. Всё равно создать эту запись?"
+            })
+
+        # Сотрудники (user/user2) задаются с фронта через user_ids.
+        serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=201, headers=headers)
+
+    def _create_journal_record_if_needed(self, instance, previous_status=None):
+        """Создаём запись журнала при переходе в финальный статус."""
+        closing_statuses = {"done", "partially_done", "canceled"}
+
+        # Создаём только если статус только что стал финальным
+        if instance.status not in closing_statuses:
+            return
+        if previous_status in closing_statuses:
+            return  # уже был финальным — не дублируем
+
+        local_tz = pytz.timezone('Europe/Kiev')
+        now = timezone.now().astimezone(local_tz)
+        date_str = now.strftime("%d.%m.%Y %H:%M")
+
+        # Имена сотрудников
+        users = instance.users.all()
+        user_names = []
+        for u in users:
+            full = f"{u.first_name} {u.last_name}".strip()
+            user_names.append(full or u.username)
+        workers_str = ", ".join(user_names) if user_names else "—"
+
+        # Услуги
+        services = instance.services.filter(is_active=True)
+        service_names = [s.name for s in services]
+        services_str = ", ".join(service_names) if service_names else "—"
+
+        # Формируем комментарий
+        comment = (
+            f"Послуги «{services_str}» були виконані "
+            f"співробітником(-ами): {workers_str} — {date_str}"
+        )
+
+        # Создаём запись журнала
+        journal_record = JournalRecord.objects.create(
+            department="service",
+            client=instance.client,
+            vehicle=instance.vehicle,
+            phone=instance.client.phone if instance.client else None,
+            comment=comment,
+        )
+
+        if services.exists():
+            journal_record.services.set(services)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        previous_status = instance.status
+
+        partial = kwargs.pop('partial', False)
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        self._create_journal_record_if_needed(instance, previous_status)
+
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
 
 

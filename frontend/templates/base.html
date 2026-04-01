@@ -10,6 +10,54 @@
         body {
             padding-top: 70px;
         }
+
+        /* Общий контейнер */
+        .fc-event-custom {
+            font-size: 12px;
+            line-height: 1.2;
+            overflow: hidden;
+        }
+
+        /* Время */
+        .fc-event-time {
+            font-weight: 600;
+            font-size: 11px;
+            opacity: 0.9;
+        }
+
+        /* Главная строка */
+        .fc-event-title {
+            font-weight: 600;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Детали */
+        .fc-event-details {
+            font-size: 11px;
+            opacity: 0.9;
+
+            display: -webkit-box;
+            -webkit-line-clamp: 2; /* ограничение строк */
+            -webkit-box-orient: vertical;
+
+            overflow: hidden;
+        }
+
+        /* Только для day view */
+        .fc-day-view .fc-event-title {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fc-day-view .fc-event-details {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 
     {% block head %}{% endblock %}
@@ -17,38 +65,39 @@
 <body>
 
 {% if user.is_authenticated %}
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-    <div class="container-fluid">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
 
-        <a class="navbar-brand" href="{% url 'journal_list' %}">SkyJournal</a>
+            <a class="navbar-brand" href="{% url 'journal_list' %}">SkyJournal</a>
 
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-        <div class="collapse navbar-collapse" id="navbarMenu">
+            <div class="collapse navbar-collapse" id="navbarMenu">
 
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item"><a class="nav-link" href="{% url 'journal_list' %}">Журнал</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'clients_list' %}">Клієнти</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'vehicles_list' %}">Машини</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'services_list' %}">Послуги</a></li>
-            </ul>
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'journal_list' %}">Журнал</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'clients_list' %}">Клієнти</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'vehicles_list' %}">Машини</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'services_list' %}">Послуги</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'appointments_calendar' %}">Записи</a></li>
+                </ul>
 
-            <div class="d-flex text-white">
-                <span class="me-3">{{ user.username }}</span>
-                <form method="post" action="{% url 'logout' %}" style="display: inline;">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-light btn-sm">Вийти</button>
-                </form>
+                <div class="d-flex text-white">
+                    <span class="me-3">{{ user.username }}</span>
+                    <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-light btn-sm">Вийти</button>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-</nav>
+    </nav>
 
-<div class="container mt-4">
-    {% block content %}{% endblock %}
-</div>
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
 {% else %}
     <script>
         window.location.href = "{% url 'login' %}";

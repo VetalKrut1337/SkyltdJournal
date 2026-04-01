@@ -1,0 +1,212 @@
+<!-- Модальное окно создания / редактирования записи -->
+<div class="modal fade" id="appointmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Новая запись на сервис</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="appointmentFormError" class="alert alert-danger" style="display:none;"></div>
+
+                <div class="row">
+                    <div class="col-md-5">
+                        <div class="mb-3">
+                            <label class="form-label">Дата и время начала</label>
+                            <input type="datetime-local" id="appointmentStart" class="form-control">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Длительность (минут)</label>
+                            <input type="number" id="appointmentDuration" class="form-control" value="60" min="1"
+                                   step="15">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Статус</label>
+                            <select id="appointmentStatus" class="form-select">
+                                <option value="pending">Ожидает</option>
+                                <option value="in_progress">В работе</option>
+                                <option value="done">Готово</option>
+                                <option value="partially_done">Частично выполнено</option>
+                                <option value="canceled">Отменено</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Сотрудники</label>
+                            <div class="position-relative">
+                                <input type="text" id="appointmentUsersSearch" class="form-control mb-2"
+                                       placeholder="Поиск по имени, фамилии или должности...">
+                                <div id="appointmentUsersDropdown"
+                                     class="list-group position-absolute w-100"
+                                     style="display:none; max-height: 240px; overflow:auto; z-index: 1080;"></div>
+                            </div>
+                            <div id="appointmentUsersSelected" class="mt-2"></div>
+                            <small class="text-muted d-block mt-1">
+                                Выберите одного или нескольких сотрудников.
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Услуги</label>
+                            <input type="text" id="appointmentServicesSearch" class="form-control mb-2"
+                                   placeholder="Поиск по услугам...">
+                            <select id="appointmentServices" class="form-select" multiple></select>
+                            <small class="text-muted">Зажмите Ctrl, чтобы выбрать несколько услуг.</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-7">
+                        <div class="mb-3">
+                            <label class="form-label">Клиент</label>
+                            <div class="position-relative">
+                                <input type="text" id="appointmentClientSearch" class="form-control mb-2"
+                                       placeholder="Поиск по имени или телефону...">
+                                <div id="appointmentClientDropdown"
+                                     class="list-group position-absolute w-100"
+                                     style="display:none; max-height: 240px; overflow:auto; z-index: 1080;"></div>
+                                <input type="hidden" id="appointmentClientId" value="">
+                            </div>
+                            <small class="text-muted">Нужно выбрать клиента из выпадающего списка.</small>
+
+                            <!-- Кнопка создания нового клиента -->
+                            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="toggleNewClientBtn">
+                                + Создать нового клиента
+                            </button>
+
+                            <!-- Скрытый блок с полями нового клиента -->
+                            <div id="newClientBlock" style="display:none;" class="mt-2 p-2 border rounded bg-light">
+                                <div class="mb-2">
+                                    <label class="form-label form-label-sm">Имя клиента</label>
+                                    <input type="text" id="newClientName" class="form-control form-control-sm"
+                                           placeholder="Иван Иванов">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label form-label-sm">Телефон</label>
+                                    <input type="text" id="newClientPhone" class="form-control form-control-sm"
+                                           placeholder="+380...">
+                                </div>
+                                <small class="text-muted">Оба поля необязательны, можно заполнить позже.</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Автомобиль</label>
+                            <div class="position-relative">
+                                <input type="text" id="appointmentVehicleSearch" class="form-control mb-2"
+                                       placeholder="Поиск по номеру или марке... ">
+                                <div id="appointmentVehicleDropdown"
+                                     class="list-group position-absolute w-100"
+                                     style="display:none; max-height: 240px; overflow:auto; z-index: 1080;"></div>
+                                <input type="hidden" id="appointmentVehicleId" value="">
+                            </div>
+                            <small class="text-muted">Сначала выберите клиента, затем машину.</small>
+
+                            <!-- Кнопка создания новой машины -->
+                            <button type="button" class="btn btn-outline-secondary btn-sm mt-2"
+                                    id="toggleNewVehicleBtn">
+                                + Создать новую машину
+                            </button>
+
+                            <!-- Скрытый блок с полями новой машины -->
+                            <div id="newVehicleBlock" style="display:none;" class="mt-2 p-2 border rounded bg-light">
+                                <div class="mb-2">
+                                    <label class="form-label form-label-sm">Номер машины</label>
+                                    <input type="text" id="newVehiclePlate" class="form-control form-control-sm"
+                                           placeholder="AA 1234 BB">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label form-label-sm">Бренд</label>
+                                    <input type="text" id="newVehicleBrand" class="form-control form-control-sm"
+                                           placeholder="Toyota, BMW...">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label form-label-sm">Модель</label>
+                                    <input type="text" id="newVehicleModel" class="form-control form-control-sm"
+                                           placeholder="Camry, X5...">
+                                </div>
+                                <small class="text-muted">Номер машины необязателен. Бренд и модель обязательны.</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Комментарий / работы</label>
+                            <textarea id="appointmentDescription" class="form-control" rows="3"
+                                      placeholder="Кратко опишите работы..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-danger me-auto d-none" id="deleteAppointmentBtn">Удалить запись
+                </button>
+                <button type="button" class="btn btn-success d-none" id="markDoneBtn">Готово</button>
+                <button type="button" class="btn btn-primary" id="saveAppointmentBtn">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно просмотра записи (только чтение) -->
+<div class="modal fade" id="appointmentViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Просмотр записи</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <div class="text-muted small">Начало</div>
+                            <div id="viewStartTime" class="fw-semibold"></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Длительность</div>
+                            <div id="viewDuration" class="fw-semibold"></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Статус</div>
+                            <div id="viewStatus" class="fw-semibold"></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Сотрудники</div>
+                            <div id="viewUsers" class="fw-semibold"></div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="mb-2">
+                            <div class="text-muted small">Клиент</div>
+                            <div id="viewClient" class="fw-semibold"></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Автомобиль</div>
+                            <div id="viewVehicle" class="fw-semibold"></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="text-muted small">Услуги</div>
+                            <div id="viewServices" class="fw-semibold"></div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="text-muted small">Комментарий / работы</div>
+                        <div id="viewDescription" class="border rounded p-2 bg-light"
+                             style="white-space: pre-wrap;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+

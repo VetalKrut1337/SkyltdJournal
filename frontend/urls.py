@@ -1,7 +1,12 @@
 from django.urls import path
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.decorators import login_required
-from .views import clients_list, client_create, vehicles_list, vehicle_create, journal_list, journal_create, services_list
+from .views import (
+    clients_list, client_create,
+    vehicles_list, vehicle_create,
+    journal_list, journal_create,
+    services_list, appointments_calendar,
+)
 
 urlpatterns = [
     path("clients/", login_required(clients_list), name="clients_list"),
@@ -15,4 +20,5 @@ urlpatterns = [
     path("journal/", login_required(journal_list), name="journal_list"),
     path("journal/create/", login_required(journal_create), name="journal_create"),
     path("services/", login_required(services_list), name="services_list"),
+    path("appointments/", login_required(appointments_calendar), name="appointments_calendar"),
 ]

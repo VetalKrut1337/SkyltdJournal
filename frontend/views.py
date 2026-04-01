@@ -63,6 +63,13 @@ def journal_list(request):
 def services_list(request):
     return render(request, "services/services_list.html")
 
+
+def appointments_calendar(request):
+    """
+    Сторінка з календарем записів на сервіс.
+    """
+    return render(request, "journals/appointments_calendar.html")
+
 def journal_create(request):
     if request.method != "POST":
         return redirect("journal_list")
