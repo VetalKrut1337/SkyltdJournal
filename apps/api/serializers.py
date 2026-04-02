@@ -178,6 +178,20 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
         return value
 
+    def validate_service_ids(self, value):
+        if not value:
+            raise serializers.ValidationError("Нужно выбрать хотя бы одну услугу.")
+
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError("Услуги не должны повторяться.")
+
+        services_qs = Service.objects.filter(id__in=value, is_active=True)
+
+        if services_qs.count() != len(value):
+            raise serializers.ValidationError("Одна или несколько услуг не найдены.")
+
+        return value
+
     # =========================================
     # CREATE
     # =========================================

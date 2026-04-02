@@ -348,6 +348,22 @@
         const deleteBtn = document.getElementById("deleteAppointmentBtn");
         const markDoneBtn = document.getElementById("markDoneBtn");
 
+        // --- Новые услуги ---
+        const addNewServiceBtn = document.getElementById("addNewServiceBtn");
+        const newServicesContainer = document.getElementById("newServicesContainer");
+
+        addNewServiceBtn.addEventListener("click", () => {
+            const row = document.createElement("div");
+            row.className = "input-group mt-1 new-service-row";
+            row.innerHTML = `
+        <input type="text" class="form-control form-control-sm new-service-name"
+               placeholder="Название новой услуги...">
+        <button type="button" class="btn btn-outline-danger btn-sm remove-service-row" title="Удалить">✕</button>
+    `;
+            row.querySelector(".remove-service-row").addEventListener("click", () => row.remove());
+            newServicesContainer.appendChild(row);
+        });
+
         // --- Новая машина ---
         const toggleNewVehicleBtn = document.getElementById("toggleNewVehicleBtn");
         const newVehicleBlock = document.getElementById("newVehicleBlock");
@@ -815,6 +831,9 @@
             selectedServiceIds.clear();
             renderServicesOptions(servicesSearchInput ? servicesSearchInput.value : "");
 
+            // Сброс новых услуг
+            document.getElementById("newServicesContainer").innerHTML = "";
+
             loadClients();
             loadVehicles();
             loadUsers();
@@ -960,8 +979,72 @@
                         });
                 }
 
-                sendCreate(false);
-                return;
+                // --- Сбор и создание новых услуг ---
+                async function resolveNewServicesAndCreate() {
+                    const newNameInputs = Array.from(
+                        newServicesContainer.querySelectorAll(".new-service-name")
+                    ).map(i => i.value.trim()).filter(Boolean);
+
+                    for (const name of newNameInputs) {
+                        // Проверка дубля в уже загруженном списке
+                        const duplicate = allServices.find(
+                            s => s.name.trim().toLowerCase() === name.toLowerCase()
+                        );
+                        if (duplicate) {
+                            // Услуга уже есть — просто добавляем её в выбранные
+                            selectedServiceIds.add(duplicate.id);
+                            continue;
+                        }
+
+                        // Создаём через API
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = "Создание услуги...";
+                        try {
+                            const res = await fetch("/api/services/", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "X-CSRFToken": csrftoken
+                                },
+                                credentials: "include",
+                                body: JSON.stringify({name, is_active: true})
+                            });
+                            if (!res.ok) {
+                                const errData = await res.json().catch(() => ({}));
+                                const msg = errData.name?.[0] || errData.detail || `Не удалось создать услугу «${name}».`;
+                                errorDiv.textContent = msg;
+                                errorDiv.style.display = "block";
+                                saveBtn.disabled = false;
+                                saveBtn.textContent = "Сохранить";
+                                return; // прерываем
+                            }
+                            const created = await res.json();
+                            allServices.push(created);
+                            selectedServiceIds.add(created.id);
+                        } catch (e) {
+                            errorDiv.textContent = `Ошибка сети при создании услуги «${name}».`;
+                            errorDiv.style.display = "block";
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "Сохранить";
+                            return;
+                        }
+                    }
+
+                    // Обновляем service_ids в payload после создания
+                    payload.service_ids = Array.from(selectedServiceIds);
+
+                    // Валидация: нужна хотя бы одна услуга
+                    if (payload.service_ids.length === 0) {
+                        errorDiv.textContent = "Пожалуйста, выберите или создайте хотя бы одну услугу.";
+                        errorDiv.style.display = "block";
+                        return;
+                    }
+
+                    sendCreate(false);
+                }
+
+                resolveNewServicesAndCreate();
+                return; // важно: прерываем синхронное выполнение
             }
 
             // Режим редактирования: меняем услуги, статус и комментарий
