@@ -70,7 +70,7 @@ def appointments_calendar(request):
     """
     return render(request, "journals/appointments_calendar.html")
 
-def journal_create(request):/
+def journal_create(request):
     if request.method != "POST":
         return redirect("journal_list")
 
